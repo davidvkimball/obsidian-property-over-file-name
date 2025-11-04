@@ -1,9 +1,10 @@
 import { TFile, MarkdownView, Editor } from "obsidian";
+import { PropertyOverFileNamePlugin } from "../types";
 
 export class DragDropService {
-  private plugin: any;
+  private plugin: PropertyOverFileNamePlugin;
 
-  constructor(plugin: any) {
+  constructor(plugin: PropertyOverFileNamePlugin) {
     this.plugin = plugin;
   }
 

@@ -1,4 +1,4 @@
-import { TFile, App } from 'obsidian';
+import { TFile, App, Plugin } from 'obsidian';
 
 export interface PluginSettings {
   propertyKey: string;
@@ -62,8 +62,16 @@ export interface AppInternal {
   };
 }
 
-// Forward declarations to avoid circular imports
-export type PropertyOverFileNamePlugin = any; // Will be the actual plugin class
+// Plugin interface for type safety
+export interface PropertyOverFileNamePlugin extends Plugin {
+  settings: PluginSettings;
+  suggest?: EditorSuggest;
+  updateLinkSuggester(): void;
+  updateQuickSwitcher(): void;
+  rebuildCache(): void;
+  saveSettings(prevQuickSwitcherState?: boolean): Promise<void>;
+  saveData(data: PluginSettings): Promise<void>;
+}
 
 export interface EditorSuggest {
   updateFileCache(file: TFile): void;

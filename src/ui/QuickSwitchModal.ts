@@ -1,15 +1,15 @@
 import { App, FuzzySuggestModal, MarkdownView, Notice, TFile, prepareFuzzySearch, FuzzyMatch } from 'obsidian';
-import { QuickSwitchItem, CachedFileData, SearchMatchReason } from '../types';
+import { QuickSwitchItem, CachedFileData, SearchMatchReason, PropertyOverFileNamePlugin, WorkspaceInternal } from '../types';
 import { fuzzyMatch, buildFileCache } from '../utils/search';
 
 export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']> {
-  private plugin: any;
+  private plugin: PropertyOverFileNamePlugin;
   private fileCache: Map<string, CachedFileData> = new Map();
   private recentFiles: TFile[] = [];
   private searchTimeout: number | null = null;
   private matchReasons: Map<string, SearchMatchReason> = new Map();
 
-  constructor(app: App, plugin: any) {
+  constructor(app: App, plugin: PropertyOverFileNamePlugin) {
     super(app);
     this.plugin = plugin;
     this.limit = 10; // Match Obsidian's default limit
@@ -60,8 +60,8 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
       
       instructions.forEach(({ command, action }) => {
         const instruction = footer.createDiv({ cls: 'prompt-instruction' });
-        const commandSpan = instruction.createSpan({ cls: 'prompt-instruction-command', text: command });
-        const actionSpan = instruction.createSpan({ text: action });
+        instruction.createSpan({ cls: 'prompt-instruction-command', text: command });
+        instruction.createSpan({ text: action });
       });
     }
   }
@@ -107,7 +107,7 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
     // Use Obsidian's internal recent files mechanism for perfect compatibility
     let recentFiles: TFile[] = [];
     
-    const workspace = this.app.workspace as any;
+    const workspace = this.app.workspace as unknown as WorkspaceInternal & { recentFileTracker?: { getLastOpenFiles(): string[] } };
     
     // Access Obsidian's recentFileTracker to get the same files as default quick switcher
     if (workspace.recentFileTracker?.getLastOpenFiles) {
@@ -439,18 +439,100 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
   }
 
   private createTypeIcon(container: HTMLElement): void {
-    // Use innerHTML for SVG as it's the most reliable way to create complex SVG structures
-    container.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="svg-icon lucide-type"><polyline points="4 7 4 4 20 4 20 7"></polyline><line x1="9" y1="20" x2="15" y2="20"></line><line x1="12" y1="4" x2="12" y2="20"></line></svg>`;
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('width', '24');
+    svg.setAttribute('height', '24');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('fill', 'none');
+    svg.setAttribute('stroke', 'currentColor');
+    svg.setAttribute('stroke-width', '2');
+    svg.setAttribute('stroke-linecap', 'round');
+    svg.setAttribute('stroke-linejoin', 'round');
+    svg.classList.add('svg-icon', 'lucide-type');
+    
+    const polyline1 = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+    polyline1.setAttribute('points', '4 7 4 4 20 4 20 7');
+    svg.appendChild(polyline1);
+    
+    const line1 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line1.setAttribute('x1', '9');
+    line1.setAttribute('y1', '20');
+    line1.setAttribute('x2', '15');
+    line1.setAttribute('y2', '20');
+    svg.appendChild(line1);
+    
+    const line2 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line2.setAttribute('x1', '12');
+    line2.setAttribute('y1', '4');
+    line2.setAttribute('x2', '12');
+    line2.setAttribute('y2', '20');
+    svg.appendChild(line2);
+    
+    container.appendChild(svg);
   }
 
   private createFileIcon(container: HTMLElement): void {
-    // Use innerHTML for SVG as it's the most reliable way to create complex SVG structures
-    container.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="svg-icon lucide-file-text"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14,2 14,8 20,8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10,9 9,9 8,9"></polyline></svg>`;
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('width', '24');
+    svg.setAttribute('height', '24');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('fill', 'none');
+    svg.setAttribute('stroke', 'currentColor');
+    svg.setAttribute('stroke-width', '2');
+    svg.setAttribute('stroke-linecap', 'round');
+    svg.setAttribute('stroke-linejoin', 'round');
+    svg.classList.add('svg-icon', 'lucide-file-text');
+    
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', 'M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z');
+    svg.appendChild(path);
+    
+    const polyline1 = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+    polyline1.setAttribute('points', '14,2 14,8 20,8');
+    svg.appendChild(polyline1);
+    
+    const line1 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line1.setAttribute('x1', '16');
+    line1.setAttribute('y1', '13');
+    line1.setAttribute('x2', '8');
+    line1.setAttribute('y2', '13');
+    svg.appendChild(line1);
+    
+    const line2 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line2.setAttribute('x1', '16');
+    line2.setAttribute('y1', '17');
+    line2.setAttribute('x2', '8');
+    line2.setAttribute('y2', '17');
+    svg.appendChild(line2);
+    
+    const polyline2 = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+    polyline2.setAttribute('points', '10,9 9,9 8,9');
+    svg.appendChild(polyline2);
+    
+    container.appendChild(svg);
   }
 
   private createForwardIcon(container: HTMLElement): void {
-    // Use innerHTML for SVG as it's the most reliable way to create complex SVG structures
-    container.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="svg-icon lucide-forward"><polyline points="15 17 20 12 15 7"></polyline><path d="M4 18v-2a4 4 0 0 1 4-4h12"></path></svg>`;
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('width', '24');
+    svg.setAttribute('height', '24');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('fill', 'none');
+    svg.setAttribute('stroke', 'currentColor');
+    svg.setAttribute('stroke-width', '2');
+    svg.setAttribute('stroke-linecap', 'round');
+    svg.setAttribute('stroke-linejoin', 'round');
+    svg.classList.add('svg-icon', 'lucide-forward');
+    
+    const polyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+    polyline.setAttribute('points', '15 17 20 12 15 7');
+    svg.appendChild(polyline);
+    
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', 'M4 18v-2a4 4 0 0 1 4-4h12');
+    svg.appendChild(path);
+    
+    container.appendChild(svg);
   }
 
   private isUsingCustomProperty(file: TFile): boolean {
@@ -475,7 +557,7 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
 
   onChooseItem(item: QuickSwitchItem['item'], evt: MouseEvent | KeyboardEvent): void {
     if ('isNewNote' in item) {
-      this.app.vault
+      void this.app.vault
         .create(`${item.newName}.md`, '')
         .then((file) => {
           this.app.workspace.getLeaf().openFile(file);
@@ -488,8 +570,8 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
       if (evt instanceof KeyboardEvent) {
         if (evt.ctrlKey && evt.altKey) {
           // Open to the right
-          this.app.workspace.splitActiveLeaf('horizontal');
-          this.app.workspace.getLeaf().openFile(item);
+          const leaf = this.app.workspace.getLeaf(true);
+          leaf.openFile(item);
         } else if (evt.ctrlKey) {
           // Open in new tab
           this.app.workspace.getLeaf().openFile(item);

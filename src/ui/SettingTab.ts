@@ -1,9 +1,10 @@
 import { App, PluginSettingTab, Setting } from 'obsidian';
+import { PropertyOverFileNamePlugin } from '../types';
 
 export class SettingTab extends PluginSettingTab {
-  plugin: any;
+  plugin: PropertyOverFileNamePlugin;
 
-  constructor(app: App, plugin: any) {
+  constructor(app: App, plugin: PropertyOverFileNamePlugin) {
     super(app, plugin);
     this.plugin = plugin;
   }

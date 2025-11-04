@@ -1,6 +1,7 @@
 import { Notice } from "obsidian";
+import { PropertyOverFileNamePlugin } from "../types";
 
-export function registerCommands(plugin: any) {
+export function registerCommands(plugin: PropertyOverFileNamePlugin) {
   // Quick Switcher command
   plugin.addCommand({
     id: 'open-quick-switcher',

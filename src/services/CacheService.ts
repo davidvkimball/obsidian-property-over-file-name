@@ -1,11 +1,11 @@
 import { TFile } from "obsidian";
-import { EditorSuggest } from "../types";
+import { EditorSuggest, PropertyOverFileNamePlugin } from "../types";
 
 export class CacheService {
-  private plugin: any;
+  private plugin: PropertyOverFileNamePlugin;
   private suggest?: EditorSuggest;
 
-  constructor(plugin: any) {
+  constructor(plugin: PropertyOverFileNamePlugin) {
     this.plugin = plugin;
   }
 

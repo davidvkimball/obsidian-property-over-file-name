@@ -1,8 +1,7 @@
-import { Platform, Plugin, TFile } from 'obsidian';
+import { Plugin, TFile } from 'obsidian';
 import { PluginSettings, WorkspaceInternal, EditorSuggest } from './types';
 import { DEFAULT_SETTINGS } from './settings';
 import { LinkTitleSuggest } from './ui/LinkTitleSuggest';
-import { QuickSwitchModal } from './ui/QuickSwitchModal';
 import { SettingTab } from './ui/SettingTab';
 import { registerCommands } from './commands';
 import { QuickSwitcherService } from './services/QuickSwitcherService';

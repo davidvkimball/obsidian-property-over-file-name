@@ -1,7 +1,7 @@
-import { AppInternal } from "../types";
+import { AppInternal, PropertyOverFileNamePlugin, WorkspaceInternal } from "../types";
 
 export class QuickSwitcherService {
-  private plugin: any;
+  private plugin: PropertyOverFileNamePlugin;
   private originalSwitcherCommand?: {
     id: string;
     name: string;
@@ -11,7 +11,7 @@ export class QuickSwitcherService {
   };
   private isCommandOverridden = false;
 
-  constructor(plugin: any) {
+  constructor(plugin: PropertyOverFileNamePlugin) {
     this.plugin = plugin;
   }
 
@@ -54,7 +54,7 @@ export class QuickSwitcherService {
       hotkeys: [{ modifiers: ["Mod"], key: "o" }],
       callback: () => {
         // Prevent any default Quick Switcher from opening
-        const workspace = this.plugin.app.workspace as any;
+        const workspace = this.plugin.app.workspace as unknown as WorkspaceInternal & { switcher?: { close(): void } };
         if (workspace.switcher && typeof workspace.switcher.close === 'function') {
           workspace.switcher.close();
         }

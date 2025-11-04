@@ -1,4 +1,4 @@
-import { TFile } from 'obsidian';
+import { TFile, MetadataCache } from 'obsidian';
 import { CachedFileData } from '../types';
 
 export function fuzzyMatch(str: string, query: string): boolean {
@@ -44,7 +44,7 @@ export function getMatchScore(display: string, query: string, basename: string, 
 
 export function buildFileCache(
   files: TFile[], 
-  metadataCache: any, 
+  metadataCache: MetadataCache, 
   propertyKey: string
 ): Map<string, CachedFileData> {
   const cache = new Map<string, CachedFileData>();
