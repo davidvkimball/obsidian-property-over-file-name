@@ -5,11 +5,10 @@ export function registerCommands(plugin: PropertyOverFileNamePlugin) {
   // Quick Switcher command
   plugin.addCommand({
     id: 'open-quick-switcher',
-    name: 'Open Quick Switcher (Property-based)',
-    callback: () => {
-      import('../ui/QuickSwitchModal').then(({ QuickSwitchModal }) => {
-        new QuickSwitchModal(plugin.app, plugin).open();
-      });
+    name: 'Open quick switcher (property-based)',
+    callback: async () => {
+      const { QuickSwitchModal } = await import('../ui/QuickSwitchModal');
+      new QuickSwitchModal(plugin.app, plugin).open();
     }
   });
 
@@ -28,7 +27,7 @@ export function registerCommands(plugin: PropertyOverFileNamePlugin) {
   // Toggle Quick Switcher command
   plugin.addCommand({
     id: 'toggle-quick-switcher',
-    name: 'Toggle property-based Quick Switcher',
+    name: 'Toggle property-based quick switcher',
     callback: async () => {
       const prevState = plugin.settings.enableForQuickSwitcher;
       plugin.settings.enableForQuickSwitcher = !plugin.settings.enableForQuickSwitcher;

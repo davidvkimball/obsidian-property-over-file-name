@@ -316,7 +316,7 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
       return results.slice(0, this.limit);
     } catch (error) {
       console.error('Error generating suggestions:', error);
-      new Notice('Error updating Quick Switcher suggestions. Please check console for details.');
+      new Notice('Error updating quick switcher suggestions. Please check console for details.');
       return [];
     }
   }
@@ -560,7 +560,7 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
       void this.app.vault
         .create(`${item.newName}.md`, '')
         .then((file) => {
-          this.app.workspace.getLeaf().openFile(file);
+          void this.app.workspace.getLeaf().openFile(file);
         })
         .catch((err) => {
           new Notice(`Error creating note: ${err.message}`);
@@ -571,20 +571,20 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
         if (evt.ctrlKey && evt.altKey) {
           // Open to the right
           const leaf = this.app.workspace.getLeaf(true);
-          leaf.openFile(item);
+          void leaf.openFile(item);
         } else if (evt.ctrlKey) {
           // Open in new tab
-          this.app.workspace.getLeaf().openFile(item);
+          void this.app.workspace.getLeaf().openFile(item);
         } else if (evt.shiftKey) {
           // Create new note (this shouldn't happen for existing files, but keeping for consistency)
-          this.app.workspace.getLeaf().openFile(item);
+          void this.app.workspace.getLeaf().openFile(item);
         } else {
           // Default: open in current tab
-          this.app.workspace.getLeaf().openFile(item);
+          void this.app.workspace.getLeaf().openFile(item);
         }
       } else {
         // Mouse click: default behavior
-        this.app.workspace.getLeaf().openFile(item);
+        void this.app.workspace.getLeaf().openFile(item);
       }
     }
   }

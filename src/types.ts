@@ -1,4 +1,4 @@
-import { TFile, App, Plugin } from 'obsidian';
+import { TFile, Plugin } from 'obsidian';
 
 export interface PluginSettings {
   propertyKey: string;
