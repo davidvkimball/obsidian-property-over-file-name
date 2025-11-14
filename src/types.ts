@@ -51,6 +51,15 @@ export interface WorkspaceInternal {
   };
 }
 
+export interface QuickSwitcherPluginInstance {
+  id: string;
+  options: {
+    showAllFileTypes: boolean;
+    showAttachments: boolean;
+    showExistingOnly: boolean;
+  };
+}
+
 export interface AppInternal {
   commands: {
     commands: Record<string, {

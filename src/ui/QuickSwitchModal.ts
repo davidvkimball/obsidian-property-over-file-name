@@ -1,5 +1,5 @@
 import { App, FuzzySuggestModal, MarkdownView, Notice, TFile, prepareFuzzySearch, prepareSimpleSearch, FuzzyMatch, sortSearchResults } from 'obsidian';
-import { QuickSwitchItem, CachedFileData, SearchMatchReason, PropertyOverFileNamePlugin, WorkspaceInternal } from '../types';
+import { QuickSwitchItem, CachedFileData, SearchMatchReason, PropertyOverFileNamePlugin, WorkspaceInternal, QuickSwitcherPluginInstance } from '../types';
 import { buildFileCache } from '../utils/search';
 
 export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']> {
@@ -12,7 +12,7 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
   constructor(app: App, plugin: PropertyOverFileNamePlugin) {
     super(app);
     this.plugin = plugin;
-    this.limit = 10; // Match Obsidian's default limit
+    this.limit = 8; // Limit to 8 items for comfortable display
     
     // Set placeholder based on setting
     if (this.plugin.settings.enableForQuickSwitcher) {
@@ -67,8 +67,9 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
   }
 
   buildFileCache(): void {
+    const files = this.getFilteredFiles();
     this.fileCache = buildFileCache(
-      this.app.vault.getMarkdownFiles(),
+      files,
       this.app.metadataCache,
       this.plugin.settings.propertyKey
     );
@@ -109,6 +110,10 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
     
     const workspace = this.app.workspace as unknown as WorkspaceInternal & { recentFileTracker?: { getLastOpenFiles(): string[] } };
     
+    // Check Quick Switcher settings to determine what file types to include
+    const quickSwitcherOptions = this.getQuickSwitcherOptions();
+    const showAttachments = quickSwitcherOptions?.showAttachments ?? true;
+    
     // Access Obsidian's recentFileTracker to get the same files as default quick switcher
     if (workspace.recentFileTracker?.getLastOpenFiles) {
       const lastOpenFiles = workspace.recentFileTracker.getLastOpenFiles();
@@ -116,8 +121,7 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
       // Convert file paths to TFile objects
       recentFiles = lastOpenFiles
         .map((filePath: string) => this.app.vault.getAbstractFileByPath(filePath))
-        .filter((file: unknown): file is TFile => file instanceof TFile)
-        .slice(0, 10);
+        .filter((file: unknown): file is TFile => file instanceof TFile);
     }
     
     // Fallback if recentFileTracker is not available
@@ -130,24 +134,84 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
         .filter((file, index, self) => self.indexOf(file) === index);
       
       recentFiles = [...openFiles];
-      
-      if (recentFiles.length < 10) {
-        const allFiles = this.app.vault.getMarkdownFiles();
-        const remainingSlots = 10 - recentFiles.length;
-        const additionalFiles = allFiles
-          .filter(file => !recentFiles.includes(file))
-          .slice(0, remainingSlots);
-        recentFiles.push(...additionalFiles);
-      }
-      
-      recentFiles = recentFiles.slice(0, 10);
     }
     
-    this.recentFiles = recentFiles;
+    // Filter based on Quick Switcher settings BEFORE backfilling
+    if (!showAttachments) {
+      // Filter out attachments - only show markdown files
+      recentFiles = recentFiles.filter(file => file.extension === 'md');
+    }
+    
+    // Always backfill to 8 items (or as many as available)
+    const targetCount = 8;
+    const existingPaths = new Set(recentFiles.map(f => f.path));
+    
+    if (recentFiles.length < targetCount) {
+      if (showAttachments) {
+        // Include all file types (markdown + attachments)
+        const allFiles = this.app.vault.getFiles().filter(file => file instanceof TFile) as TFile[];
+        const additionalFiles = allFiles
+          .filter(file => !existingPaths.has(file.path))
+          .slice(0, targetCount - recentFiles.length);
+        recentFiles.push(...additionalFiles);
+      } else {
+        // Only markdown files
+        const allMarkdownFiles = this.app.vault.getMarkdownFiles();
+        const additionalFiles = allMarkdownFiles
+          .filter(file => !existingPaths.has(file.path))
+          .slice(0, targetCount - recentFiles.length);
+        recentFiles.push(...additionalFiles);
+      }
+    }
+    
+    // Limit to 8 files
+    this.recentFiles = recentFiles.slice(0, targetCount);
   }
 
   getItems(): QuickSwitchItem['item'][] {
-    return this.app.vault.getMarkdownFiles();
+    return this.getFilteredFiles();
+  }
+
+  private getFilteredFiles(): TFile[] {
+    const quickSwitcherOptions = this.getQuickSwitcherOptions();
+    
+    // Start with markdown files
+    let files = this.app.vault.getMarkdownFiles();
+    
+    // If we can access Quick Switcher options and attachments are enabled, include them
+    if (quickSwitcherOptions?.showAttachments) {
+      const allFiles = this.app.vault.getFiles().filter(file => file instanceof TFile) as TFile[];
+      // Include markdown files and attachments
+      files = allFiles.filter(file => 
+        file.extension === 'md' || this.isAttachment(file)
+      );
+    }
+    // If showAttachments is false or we can't access options, only show markdown files (default behavior)
+
+    return files;
+  }
+
+  private isAttachment(file: TFile): boolean {
+    const attachmentExtensions = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'pdf', 'mp4', 'mp3', 'wav', 'ogg', 'webm'];
+    return attachmentExtensions.includes(file.extension.toLowerCase());
+  }
+
+  private getQuickSwitcherOptions(): QuickSwitcherPluginInstance['options'] | null {
+    try {
+      // Access the internal Quick Switcher plugin the same way Quick Switch ++ does
+      const internalPlugins = (this.app as any).internalPlugins;
+      if (!internalPlugins) return null;
+      
+      const switcherPlugin = internalPlugins.getPluginById?.('switcher');
+      if (!switcherPlugin || !switcherPlugin.instance) {
+        return null;
+      }
+
+      return switcherPlugin.instance.options || null;
+    } catch (error) {
+      console.warn('Property Over Filename: Could not access Quick Switcher options:', error);
+      return null;
+    }
   }
 
   getItemText(item: QuickSwitchItem['item']): string {
@@ -188,7 +252,7 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
       }
       
       // Use default Obsidian search - just show files with file name matching
-      const files = this.app.vault.getMarkdownFiles();
+      const files = this.getFilteredFiles();
       const search = this.plugin.settings.useSimpleSearch 
         ? prepareSimpleSearch(searchQuery)
         : prepareFuzzySearch(searchQuery);
@@ -223,12 +287,13 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
   }
 
   private getRecentFilesResults(): FuzzyMatch<QuickSwitchItem['item']>[] {
+    // Update recent files (this already handles filtering and backfilling)
     this.updateRecentFiles();
     
     // Clear match reasons for recent files since they're not search results
     this.matchReasons.clear();
     
-    // Only show recent files, exactly like Obsidian's default
+    // Return the recent files (already filtered and backfilled in updateRecentFiles)
     return this.recentFiles.map(file => ({
       item: file,
       match: { score: 1000, matches: [] }
@@ -311,8 +376,11 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
         )
       );
 
-      // Only add new note option if no results at all
-      if (results.length === 0) {
+      // Only add new note option if no results at all and "Show existing only" is disabled
+      const quickSwitcherOptions = this.getQuickSwitcherOptions();
+      const showExistingOnly = quickSwitcherOptions?.showExistingOnly ?? false;
+      
+      if (results.length === 0 && !showExistingOnly) {
         const newItem = { isNewNote: true, newName: searchQuery };
         results.push({
           item: newItem,
