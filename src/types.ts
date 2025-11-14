@@ -29,6 +29,8 @@ export interface SuggestionItem {
   display: string;
   isCustomDisplay: boolean;
   isNoMatch?: boolean;
+  isNewNote?: boolean;
+  newName?: string;
 }
 
 export interface QuickSwitchItem {

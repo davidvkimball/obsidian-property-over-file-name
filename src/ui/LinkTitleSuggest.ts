@@ -1,5 +1,5 @@
 import { Editor, EditorPosition, EditorSuggest, EditorSuggestContext, EditorSuggestTriggerInfo, MarkdownView, Notice, TFile, prepareFuzzySearch, prepareSimpleSearch, SearchResult, sortSearchResults } from 'obsidian';
-import { SuggestionItem, CachedFileData, EditorSuggestInternal, SearchMatchReason, PropertyOverFileNamePlugin, VaultInternal } from '../types';
+import { SuggestionItem, CachedFileData, EditorSuggestInternal, SearchMatchReason, PropertyOverFileNamePlugin, VaultInternal, QuickSwitcherPluginInstance } from '../types';
 import { buildFileCache } from '../utils/search';
 
 export class LinkTitleSuggest extends EditorSuggest<SuggestionItem> {
@@ -189,13 +189,53 @@ export class LinkTitleSuggest extends EditorSuggest<SuggestionItem> {
       }
     }
 
+    // Add unresolved links if "Show existing only" is disabled
+    // This matches Quick Switch ++ behavior: unresolved: !settings.showExistingOnly
+    const quickSwitcherOptions = this.getQuickSwitcherOptions();
+    const showExistingOnly = quickSwitcherOptions?.showExistingOnly ?? false;
+    
+    if (!showExistingOnly) {
+      // Get unresolved links from metadata cache (like Quick Switch ++ does)
+      const { unresolvedLinks } = this.app.metadataCache;
+      const unresolvedSet = new Set<string>();
+      
+      // Collect all unresolved links from all files
+      for (const sourcePath in unresolvedLinks) {
+        const links = Object.keys(unresolvedLinks[sourcePath]);
+        links.forEach(link => unresolvedSet.add(link));
+      }
+      
+      // Search unresolved links and add matches
+      for (const unresolved of unresolvedSet) {
+        const unresolvedMatch = search(unresolved);
+        if (unresolvedMatch && unresolvedMatch.matches.length > 0) {
+          // Add as a suggestion without a file (unresolved link)
+          searchableSuggestions.push({
+            item: {
+              display: unresolved,
+              isCustomDisplay: false,
+              // No file property means it's unresolved
+            },
+            match: unresolvedMatch
+          });
+        }
+      }
+    }
+
     // Use Obsidian's native sorting for exact vanilla compatibility
     sortSearchResults(searchableSuggestions);
     
     // Extract suggestions from sorted results
-    const suggestions = searchableSuggestions.map(s => s.item);
+    let suggestions = searchableSuggestions.map(s => s.item);
+    
+    // Filter out unresolved links if "Show existing only" is enabled
+    // Unresolved links are items without a file property
+    if (showExistingOnly) {
+      suggestions = suggestions.filter(s => s.file !== undefined);
+    }
 
-    // If no suggestions found, add a "No match found" item
+    // Link suggester should NOT show "create new note" option - that's Quick Switcher behavior
+    // But if there are no matches and there's a query, show "No match found" like vanilla Obsidian
     if (suggestions.length === 0 && query) {
       suggestions.push({
         display: 'No match found',
@@ -203,7 +243,7 @@ export class LinkTitleSuggest extends EditorSuggest<SuggestionItem> {
         isNoMatch: true
       });
     }
-
+    
     return suggestions;
   }
 
@@ -406,14 +446,20 @@ export class LinkTitleSuggest extends EditorSuggest<SuggestionItem> {
     if (line.slice(end.ch, end.ch + 2) === ']]') {
       endPos = { line: end.line, ch: end.ch + 2 };
     }
+    
+    // Handle existing file
+    if (!suggestion.file) {
+      return;
+    }
+    
     const vault = this.app.vault as unknown as VaultInternal;
     const useMarkdownLinks = vault.getConfig?.('useMarkdownLinks') ?? false;
     let linkText: string;
 
     if (useMarkdownLinks) {
-      linkText = `[${suggestion.display}](${encodeURI(suggestion.file!.path)})`;
+      linkText = `[${suggestion.display}](${encodeURI(suggestion.file.path)})`;
     } else {
-      const linkPath = suggestion.file!.path.replace('.md', '');
+      const linkPath = suggestion.file.path.replace('.md', '');
       linkText = `[[${linkPath}|${suggestion.display}]]`;
     }
     editor.replaceRange(linkText, { line: start.line, ch: start.ch }, endPos);
@@ -423,6 +469,24 @@ export class LinkTitleSuggest extends EditorSuggest<SuggestionItem> {
     } catch (error) {
       console.error('Error setting cursor:', error);
       new Notice('Error setting cursor position. Please check console for details.');
+    }
+  }
+  
+  private getQuickSwitcherOptions(): QuickSwitcherPluginInstance['options'] | null {
+    try {
+      // Access the internal Quick Switcher plugin the same way Quick Switch ++ does
+      const internalPlugins = (this.app as any).internalPlugins;
+      if (!internalPlugins) return null;
+      
+      const switcherPlugin = internalPlugins.getPluginById?.('switcher');
+      if (!switcherPlugin || !switcherPlugin.instance) {
+        return null;
+      }
+
+      return switcherPlugin.instance.options || null;
+    } catch (error) {
+      console.warn('Property Over Filename: Could not access Quick Switcher options:', error);
+      return null;
     }
   }
 }

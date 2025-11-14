@@ -268,6 +268,16 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
       // Use Obsidian's native sorting for exact vanilla compatibility
       sortSearchResults(results);
       
+      // Always add new note option if no results
+      // "Show existing only" only affects showing unresolved links, not creating new notes
+      if (results.length === 0) {
+        const newItem = { isNewNote: true, newName: searchQuery };
+        results.push({
+          item: newItem,
+          match: { score: 1000, matches: [[0, searchQuery.length]] },
+        });
+      }
+      
       return results.slice(0, this.limit);
     }
 
@@ -362,33 +372,83 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
       }
     }
 
+    // Add unresolved links if "Show existing only" is disabled
+    // This matches Quick Switch ++ behavior: unresolved: !settings.showExistingOnly
+    const quickSwitcherOptions = this.getQuickSwitcherOptions();
+    const showExistingOnly = quickSwitcherOptions?.showExistingOnly ?? false;
+    
+    if (!showExistingOnly) {
+      // Get unresolved links from metadata cache (like Quick Switch ++ does)
+      const { unresolvedLinks } = this.app.metadataCache;
+      const unresolvedSet = new Set<string>();
+      
+      // Collect all unresolved links from all files
+      for (const sourcePath in unresolvedLinks) {
+        const links = Object.keys(unresolvedLinks[sourcePath]);
+        links.forEach(link => unresolvedSet.add(link));
+      }
+      
+      // Search unresolved links and add matches
+      for (const unresolved of unresolvedSet) {
+        const unresolvedMatch = search(unresolved);
+        if (unresolvedMatch && unresolvedMatch.matches.length > 0) {
+          // Add as a suggestion without a file (unresolved link)
+          // Use a special object to represent unresolved links
+          results.push({
+            item: { isUnresolved: true, unresolvedText: unresolved } as any,
+            match: unresolvedMatch
+          });
+        }
+      }
+    }
+
     try {
       // Use Obsidian's native sorting for exact vanilla compatibility
       sortSearchResults(results);
+      
+      // Filter out unresolved links if "Show existing only" is enabled
+      // Unresolved links are items with isUnresolved property, but keep "create new note" options
+      let filteredResults = results;
+      if (showExistingOnly) {
+        filteredResults = results.filter(r => {
+          // Keep files and new note items, filter out unresolved links
+          return r.item instanceof TFile || (r.item as any).isNewNote === true;
+        });
+      }
 
-      // Check for exact matches
+      // Check for exact matches in existing files
       const lowerQuery = searchQuery.toLowerCase();
-      results.some(r => 
+      let exactMatch = filteredResults.some(r => 
         r.item instanceof TFile && (
           this.getDisplayName(r.item).toLowerCase() === lowerQuery ||
           (this.plugin.settings.includeFilenameInSearch && r.item.basename.toLowerCase() === lowerQuery) ||
           (this.plugin.settings.includeAliasesInSearch && this.fileCache.get(r.item.path)?.aliases.some(alias => alias.toLowerCase() === lowerQuery))
         )
       );
-
-      // Only add new note option if no results at all and "Show existing only" is disabled
-      const quickSwitcherOptions = this.getQuickSwitcherOptions();
-      const showExistingOnly = quickSwitcherOptions?.showExistingOnly ?? false;
       
-      if (results.length === 0 && !showExistingOnly) {
+      // Also check unresolved links if they're being shown
+      if (!showExistingOnly && !exactMatch) {
+        const { unresolvedLinks } = this.app.metadataCache;
+        const unresolvedSet = new Set<string>();
+        for (const sourcePath in unresolvedLinks) {
+          const links = Object.keys(unresolvedLinks[sourcePath]);
+          links.forEach(link => unresolvedSet.add(link));
+        }
+        // Check if query exactly matches any unresolved link
+        exactMatch = Array.from(unresolvedSet).some(link => link.toLowerCase() === lowerQuery);
+      }
+
+      // Always add new note option if no exact match exists
+      // "Show existing only" only affects showing unresolved links, not creating new notes
+      if (!exactMatch && searchQuery) {
         const newItem = { isNewNote: true, newName: searchQuery };
-        results.push({
+        filteredResults.unshift({
           item: newItem,
           match: { score: 1000, matches: [[0, searchQuery.length]] },
         });
       }
 
-      return results.slice(0, this.limit);
+      return filteredResults.slice(0, this.limit);
     } catch (error) {
       console.error('Error generating suggestions:', error);
       new Notice('Error updating quick switcher suggestions. Please check console for details.');
@@ -398,6 +458,24 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
 
   renderSuggestion(suggestion: FuzzyMatch<QuickSwitchItem['item']>, el: HTMLElement): void {
     const { item } = suggestion;
+    
+    // Handle unresolved links - show file-plus icon instead of "Enter to create" text
+    if ((item as any).isUnresolved) {
+      const unresolvedText = (item as any).unresolvedText;
+      el.empty();
+      el.addClass('mod-complex');
+      const suggestionContent = el.createDiv({ cls: 'suggestion-content' });
+      const suggestionTitle = suggestionContent.createDiv({ cls: 'suggestion-title' });
+      suggestionTitle.setText(unresolvedText);
+      const suggestionAux = el.createDiv({ cls: 'suggestion-aux' });
+      const suggestionFlair = suggestionAux.createSpan({ 
+        cls: 'suggestion-flair', 
+        attr: { 'aria-label': 'Unresolved link - Enter to create' } 
+      });
+      this.createFilePlusIcon(suggestionFlair);
+      return;
+    }
+    
     const text = this.getItemText(item);
     
     if ('isNewNote' in item) {
@@ -610,6 +688,43 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
     container.appendChild(svg);
   }
 
+  private createFilePlusIcon(container: HTMLElement): void {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('width', '24');
+    svg.setAttribute('height', '24');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('fill', 'none');
+    svg.setAttribute('stroke', 'currentColor');
+    svg.setAttribute('stroke-width', '2');
+    svg.setAttribute('stroke-linecap', 'round');
+    svg.setAttribute('stroke-linejoin', 'round');
+    svg.classList.add('svg-icon', 'lucide-file-plus');
+    
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', 'M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z');
+    svg.appendChild(path);
+    
+    const polyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+    polyline.setAttribute('points', '14,2 14,8 20,8');
+    svg.appendChild(polyline);
+    
+    const line1 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line1.setAttribute('x1', '12');
+    line1.setAttribute('y1', '18');
+    line1.setAttribute('x2', '12');
+    line1.setAttribute('y2', '12');
+    svg.appendChild(line1);
+    
+    const line2 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line2.setAttribute('x1', '9');
+    line2.setAttribute('y1', '15');
+    line2.setAttribute('x2', '15');
+    line2.setAttribute('y2', '15');
+    svg.appendChild(line2);
+    
+    container.appendChild(svg);
+  }
+
   private isUsingCustomProperty(file: TFile): boolean {
     const cache = this.app.metadataCache.getFileCache(file);
     const frontmatter = cache?.frontmatter;
@@ -631,6 +746,20 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
   }
 
   onChooseItem(item: QuickSwitchItem['item'], evt: MouseEvent | KeyboardEvent): void {
+    // Handle unresolved links - create the file
+    if ((item as any).isUnresolved) {
+      const unresolvedText = (item as any).unresolvedText;
+      void this.app.vault
+        .create(`${unresolvedText}.md`, '')
+        .then((file) => {
+          void this.app.workspace.getLeaf().openFile(file);
+        })
+        .catch((err) => {
+          new Notice(`Error creating note: ${err.message}`);
+        });
+      return;
+    }
+    
     if ('isNewNote' in item) {
       void this.app.vault
         .create(`${item.newName}.md`, '')
