@@ -1,5 +1,5 @@
 import { App, FuzzySuggestModal, MarkdownView, Notice, TFile, prepareFuzzySearch, prepareSimpleSearch, FuzzyMatch, sortSearchResults } from 'obsidian';
-import { QuickSwitchItem, CachedFileData, SearchMatchReason, PropertyOverFileNamePlugin, WorkspaceInternal, QuickSwitcherPluginInstance, QuickSwitchItemType, UnresolvedLinkItem, NewNoteItem, AppInternal } from '../types';
+import { QuickSwitchItem, CachedFileData, SearchMatchReason, PropertyOverFileNamePlugin, WorkspaceInternal, QuickSwitcherPluginInstance, UnresolvedLinkItem, NewNoteItem, AppInternal } from '../types';
 import { buildFileCache } from '../utils/search';
 
 export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']> {
