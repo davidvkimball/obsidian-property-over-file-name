@@ -33,8 +33,20 @@ export interface SuggestionItem {
   newName?: string;
 }
 
+export interface UnresolvedLinkItem {
+  isUnresolved: true;
+  unresolvedText: string;
+}
+
+export interface NewNoteItem {
+  isNewNote: true;
+  newName: string;
+}
+
+export type QuickSwitchItemType = TFile | NewNoteItem | UnresolvedLinkItem;
+
 export interface QuickSwitchItem {
-  item: TFile | { isNewNote: boolean; newName: string };
+  item: QuickSwitchItemType;
   match: { score: number; matches: number[][] };
 }
 
@@ -71,6 +83,11 @@ export interface AppInternal {
       hotkeys?: Array<{ modifiers: string[]; key: string }>;
       callback: () => void;
     }>;
+  };
+  internalPlugins?: {
+    getPluginById?: (id: string) => {
+      instance?: QuickSwitcherPluginInstance;
+    } | null;
   };
 }
 

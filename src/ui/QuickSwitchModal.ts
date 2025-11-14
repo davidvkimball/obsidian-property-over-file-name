@@ -1,5 +1,5 @@
 import { App, FuzzySuggestModal, MarkdownView, Notice, TFile, prepareFuzzySearch, prepareSimpleSearch, FuzzyMatch, sortSearchResults } from 'obsidian';
-import { QuickSwitchItem, CachedFileData, SearchMatchReason, PropertyOverFileNamePlugin, WorkspaceInternal, QuickSwitcherPluginInstance } from '../types';
+import { QuickSwitchItem, CachedFileData, SearchMatchReason, PropertyOverFileNamePlugin, WorkspaceInternal, QuickSwitcherPluginInstance, QuickSwitchItemType, UnresolvedLinkItem, NewNoteItem, AppInternal } from '../types';
 import { buildFileCache } from '../utils/search';
 
 export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']> {
@@ -149,7 +149,7 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
     if (recentFiles.length < targetCount) {
       if (showAttachments) {
         // Include all file types (markdown + attachments)
-        const allFiles = this.app.vault.getFiles().filter(file => file instanceof TFile) as TFile[];
+        const allFiles = this.app.vault.getFiles().filter((file): file is TFile => file instanceof TFile);
         const additionalFiles = allFiles
           .filter(file => !existingPaths.has(file.path))
           .slice(0, targetCount - recentFiles.length);
@@ -180,7 +180,7 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
     
     // If we can access Quick Switcher options and attachments are enabled, include them
     if (quickSwitcherOptions?.showAttachments) {
-      const allFiles = this.app.vault.getFiles().filter(file => file instanceof TFile) as TFile[];
+      const allFiles = this.app.vault.getFiles().filter((file): file is TFile => file instanceof TFile);
       // Include markdown files and attachments
       files = allFiles.filter(file => 
         file.extension === 'md' || this.isAttachment(file)
@@ -199,7 +199,7 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
   private getQuickSwitcherOptions(): QuickSwitcherPluginInstance['options'] | null {
     try {
       // Access the internal Quick Switcher plugin the same way Quick Switch ++ does
-      const internalPlugins = (this.app as any).internalPlugins;
+      const internalPlugins = (this.app as unknown as AppInternal).internalPlugins;
       if (!internalPlugins) return null;
       
       const switcherPlugin = internalPlugins.getPluginById?.('switcher');
@@ -217,6 +217,10 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
   getItemText(item: QuickSwitchItem['item']): string {
     if ('isNewNote' in item) {
       return item.newName; // Just return the name, Obsidian will handle the "Enter to create" text
+    }
+    
+    if ('isUnresolved' in item) {
+      return item.unresolvedText;
     }
     
     // When disabled, show just the file name like default Obsidian
@@ -271,7 +275,7 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
       // Always add new note option if no results
       // "Show existing only" only affects showing unresolved links, not creating new notes
       if (results.length === 0) {
-        const newItem = { isNewNote: true, newName: searchQuery };
+        const newItem: NewNoteItem = { isNewNote: true, newName: searchQuery };
         results.push({
           item: newItem,
           match: { score: 1000, matches: [[0, searchQuery.length]] },
@@ -394,8 +398,9 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
         if (unresolvedMatch && unresolvedMatch.matches.length > 0) {
           // Add as a suggestion without a file (unresolved link)
           // Use a special object to represent unresolved links
+          const unresolvedItem: UnresolvedLinkItem = { isUnresolved: true, unresolvedText: unresolved };
           results.push({
-            item: { isUnresolved: true, unresolvedText: unresolved } as any,
+            item: unresolvedItem,
             match: unresolvedMatch
           });
         }
@@ -412,7 +417,7 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
       if (showExistingOnly) {
         filteredResults = results.filter(r => {
           // Keep files and new note items, filter out unresolved links
-          return r.item instanceof TFile || (r.item as any).isNewNote === true;
+          return r.item instanceof TFile || ('isNewNote' in r.item && r.item.isNewNote === true);
         });
       }
 
@@ -441,7 +446,7 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
       // Always add new note option if no exact match exists
       // "Show existing only" only affects showing unresolved links, not creating new notes
       if (!exactMatch && searchQuery) {
-        const newItem = { isNewNote: true, newName: searchQuery };
+        const newItem: NewNoteItem = { isNewNote: true, newName: searchQuery };
         filteredResults.unshift({
           item: newItem,
           match: { score: 1000, matches: [[0, searchQuery.length]] },
@@ -460,8 +465,8 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
     const { item } = suggestion;
     
     // Handle unresolved links - show file-plus icon instead of "Enter to create" text
-    if ((item as any).isUnresolved) {
-      const unresolvedText = (item as any).unresolvedText;
+    if ('isUnresolved' in item && item.isUnresolved) {
+      const unresolvedText = item.unresolvedText;
       el.empty();
       el.addClass('mod-complex');
       const suggestionContent = el.createDiv({ cls: 'suggestion-content' });
@@ -506,6 +511,11 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
       }
     } else {
       // When enabled, use our custom styling with icons
+      // Only show icons for TFile items, not unresolved links
+      if (!(item instanceof TFile)) {
+        el.setText(text);
+        return;
+      }
       const matchReason = this.matchReasons.get(item.path);
       const shouldShowIcon = matchReason && (matchReason.matchedInTitle || matchReason.matchedInFilename || matchReason.matchedInAlias);
       
@@ -747,8 +757,8 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
 
   onChooseItem(item: QuickSwitchItem['item'], evt: MouseEvent | KeyboardEvent): void {
     // Handle unresolved links - create the file using openLinkText to respect new note location settings
-    if ((item as any).isUnresolved) {
-      const unresolvedText = (item as any).unresolvedText;
+    if ('isUnresolved' in item && item.isUnresolved) {
+      const unresolvedText = item.unresolvedText;
       const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
       const sourcePath = activeView?.file?.path || '';
       
@@ -767,7 +777,7 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
       void this.app.workspace.openLinkText(item.newName, sourcePath).catch((err) => {
         new Notice(`Error creating note: ${err.message}`);
       });
-    } else {
+    } else if (item instanceof TFile) {
       // Handle different modifier keys like default Obsidian
       if (evt instanceof KeyboardEvent) {
         if (evt.ctrlKey && evt.altKey) {

@@ -1,5 +1,5 @@
 import { Editor, EditorPosition, EditorSuggest, EditorSuggestContext, EditorSuggestTriggerInfo, MarkdownView, Notice, TFile, prepareFuzzySearch, prepareSimpleSearch, SearchResult, sortSearchResults } from 'obsidian';
-import { SuggestionItem, CachedFileData, EditorSuggestInternal, SearchMatchReason, PropertyOverFileNamePlugin, VaultInternal, QuickSwitcherPluginInstance } from '../types';
+import { SuggestionItem, CachedFileData, EditorSuggestInternal, SearchMatchReason, PropertyOverFileNamePlugin, VaultInternal, QuickSwitcherPluginInstance, AppInternal } from '../types';
 import { buildFileCache } from '../utils/search';
 
 export class LinkTitleSuggest extends EditorSuggest<SuggestionItem> {
@@ -475,7 +475,7 @@ export class LinkTitleSuggest extends EditorSuggest<SuggestionItem> {
   private getQuickSwitcherOptions(): QuickSwitcherPluginInstance['options'] | null {
     try {
       // Access the internal Quick Switcher plugin the same way Quick Switch ++ does
-      const internalPlugins = (this.app as any).internalPlugins;
+      const internalPlugins = (this.app as unknown as AppInternal).internalPlugins;
       if (!internalPlugins) return null;
       
       const switcherPlugin = internalPlugins.getPluginById?.('switcher');
