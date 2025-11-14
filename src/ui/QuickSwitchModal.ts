@@ -1,6 +1,6 @@
-import { App, FuzzySuggestModal, MarkdownView, Notice, TFile, prepareFuzzySearch, FuzzyMatch } from 'obsidian';
+import { App, FuzzySuggestModal, MarkdownView, Notice, TFile, prepareFuzzySearch, prepareSimpleSearch, FuzzyMatch, sortSearchResults } from 'obsidian';
 import { QuickSwitchItem, CachedFileData, SearchMatchReason, PropertyOverFileNamePlugin, WorkspaceInternal } from '../types';
-import { fuzzyMatch, buildFileCache } from '../utils/search';
+import { buildFileCache } from '../utils/search';
 
 export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']> {
   private plugin: PropertyOverFileNamePlugin;
@@ -189,7 +189,9 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
       
       // Use default Obsidian search - just show files with file name matching
       const files = this.app.vault.getMarkdownFiles();
-      const search = prepareFuzzySearch(searchQuery);
+      const search = this.plugin.settings.useSimpleSearch 
+        ? prepareSimpleSearch(searchQuery)
+        : prepareFuzzySearch(searchQuery);
       const results: FuzzyMatch<QuickSwitchItem['item']>[] = [];
       
       for (const file of files) {
@@ -199,15 +201,8 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
         }
       }
       
-      // Sort by score and then alphabetically
-      results.sort((a, b) => {
-        const scoreDiff = b.match.score - a.match.score;
-        if (scoreDiff !== 0) return scoreDiff;
-        if (a.item instanceof TFile && b.item instanceof TFile) {
-          return a.item.basename.localeCompare(b.item.basename);
-        }
-        return 0;
-      });
+      // Use Obsidian's native sorting for exact vanilla compatibility
+      sortSearchResults(results);
       
       return results.slice(0, this.limit);
     }
@@ -241,7 +236,10 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
   }
 
   private performSearch(searchQuery: string): FuzzyMatch<QuickSwitchItem['item']>[] {
-    const search = prepareFuzzySearch(searchQuery);
+    // Use simple search for large vaults if enabled, otherwise use fuzzy search
+    const search = this.plugin.settings.useSimpleSearch 
+      ? prepareSimpleSearch(searchQuery)
+      : prepareFuzzySearch(searchQuery);
     const results: FuzzyMatch<QuickSwitchItem['item']>[] = [];
     this.matchReasons.clear(); // Clear previous match reasons
 
@@ -249,7 +247,6 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
     for (const cachedData of this.fileCache.values()) {
       const { file, displayName, aliases } = cachedData;
       const text = this.getItemText(file);
-      const match = search(text) ?? { score: 0, matches: [] };
       
       // Track which fields caused the match
       const matchReason: SearchMatchReason = {
@@ -258,41 +255,51 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
         matchedInAlias: false
       };
       
-      // Check if title/property match
-      if (match.matches.length > 0) {
+      // Primary match: search title/property first
+      let primaryMatch = search(text);
+      let bestMatch = primaryMatch;
+      let matchType: 'title' | 'filename' | 'alias' | null = null;
+      
+      if (primaryMatch && primaryMatch.matches.length > 0) {
         matchReason.matchedInTitle = true;
-      }
-      
-      // Check if file name match (only if different from title)
-      if (this.plugin.settings.includeFilenameInSearch && 
-          file.basename !== displayName && 
-          fuzzyMatch(file.basename, searchQuery)) {
-        matchReason.matchedInFilename = true;
-      }
-      
-      // Check if alias match
-      let aliasMatch = false;
-      if (this.plugin.settings.includeAliasesInSearch && aliases.length > 0) {
-        aliasMatch = aliases.some(alias => fuzzyMatch(alias, searchQuery));
-        if (aliasMatch) {
-          matchReason.matchedInAlias = true;
+        matchType = 'title';
+      } else {
+        // Secondary match: search filename (with downranking)
+        if (this.plugin.settings.includeFilenameInSearch && file.basename !== displayName) {
+          const filenameMatch = search(file.basename);
+          if (filenameMatch && filenameMatch.matches.length > 0) {
+            matchReason.matchedInFilename = true;
+            // Downrank filename matches by -1
+            bestMatch = { ...filenameMatch, score: filenameMatch.score - 1 };
+            matchType = 'filename';
+          }
+        }
+        
+        // Tertiary match: search aliases (with downranking)
+        if (!matchType && this.plugin.settings.includeAliasesInSearch && aliases.length > 0) {
+          for (const alias of aliases) {
+            const aliasMatch = search(alias);
+            if (aliasMatch && aliasMatch.matches.length > 0) {
+              matchReason.matchedInAlias = true;
+              // Downrank alias matches by -1
+              bestMatch = { ...aliasMatch, score: aliasMatch.score - 1 };
+              matchType = 'alias';
+              break;
+            }
+          }
         }
       }
       
       // If we have any match, add to results
-      if (match.matches.length > 0 || aliasMatch) {
-        results.push({ item: file, match: match.matches.length > 0 ? match : { score: -0.1, matches: [[0, searchQuery.length]] } });
+      if (bestMatch && bestMatch.matches.length > 0) {
+        results.push({ item: file, match: bestMatch });
         this.matchReasons.set(file.path, matchReason);
       }
     }
 
     try {
-      // Sort by score and then alphabetically
-      results.sort((a, b) => {
-        const scoreDiff = b.match.score - a.match.score;
-        if (scoreDiff !== 0) return scoreDiff;
-        return this.getItemText(a.item).localeCompare(this.getItemText(b.item));
-      });
+      // Use Obsidian's native sorting for exact vanilla compatibility
+      sortSearchResults(results);
 
       // Check for exact matches
       const lowerQuery = searchQuery.toLowerCase();

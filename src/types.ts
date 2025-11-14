@@ -7,6 +7,7 @@ export interface PluginSettings {
   includeFilenameInSearch: boolean;
   includeAliasesInSearch: boolean;
   enableForDragDrop: boolean;
+  useSimpleSearch: boolean;
 }
 
 export interface CachedFileData {

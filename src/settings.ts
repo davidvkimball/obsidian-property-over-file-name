@@ -7,6 +7,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   includeFilenameInSearch: true,
   includeAliasesInSearch: true,
   enableForDragDrop: true,
+  useSimpleSearch: false,
 };
 
 export function validateSettings(settings: PluginSettings): { isValid: boolean; errors: string[] } {

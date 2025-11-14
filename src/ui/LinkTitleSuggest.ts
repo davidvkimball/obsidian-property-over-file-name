@@ -1,6 +1,6 @@
-import { Editor, EditorPosition, EditorSuggest, EditorSuggestContext, EditorSuggestTriggerInfo, MarkdownView, Notice, TFile } from 'obsidian';
+import { Editor, EditorPosition, EditorSuggest, EditorSuggestContext, EditorSuggestTriggerInfo, MarkdownView, Notice, TFile, prepareFuzzySearch, prepareSimpleSearch, SearchResult, sortSearchResults } from 'obsidian';
 import { SuggestionItem, CachedFileData, EditorSuggestInternal, SearchMatchReason, PropertyOverFileNamePlugin, VaultInternal } from '../types';
-import { fuzzyMatch, getMatchScore, buildFileCache } from '../utils/search';
+import { buildFileCache } from '../utils/search';
 
 export class LinkTitleSuggest extends EditorSuggest<SuggestionItem> {
   private plugin: PropertyOverFileNamePlugin;
@@ -104,8 +104,31 @@ export class LinkTitleSuggest extends EditorSuggest<SuggestionItem> {
   }
 
   private performSearch(query: string): SuggestionItem[] {
-    const suggestions: SuggestionItem[] = [];
-    const existingFiles = new Set<string>();
+    // If no query, show all files
+    if (!query || query.trim() === '') {
+      const suggestions: SuggestionItem[] = [];
+      for (const cachedData of this.fileCache.values()) {
+        suggestions.push({ 
+          file: cachedData.file, 
+          display: cachedData.displayName, 
+          isCustomDisplay: cachedData.isCustomDisplay 
+        });
+      }
+      return suggestions;
+    }
+
+    // Use simple search for large vaults if enabled, otherwise use fuzzy search
+    const search = this.plugin.settings.useSimpleSearch 
+      ? prepareSimpleSearch(query)
+      : prepareFuzzySearch(query);
+    
+    // Create a structure compatible with sortSearchResults
+    interface SearchableSuggestion {
+      item: SuggestionItem;
+      match: SearchResult;
+    }
+    
+    const searchableSuggestions: SearchableSuggestion[] = [];
     this.matchReasons.clear(); // Clear previous match reasons
 
     // Use cached data for much faster search
@@ -119,37 +142,58 @@ export class LinkTitleSuggest extends EditorSuggest<SuggestionItem> {
         matchedInAlias: false
       };
       
-      let matches = false;
+      // Primary match: search title/property first
+      let primaryMatch = search(displayName);
+      let bestMatch: SearchResult | null = primaryMatch;
+      let matchType: 'title' | 'filename' | 'alias' | null = null;
       
-      // Check if title/property match
-      if (!query || fuzzyMatch(displayName, query)) {
-        matches = true;
+      if (primaryMatch && primaryMatch.matches.length > 0) {
         matchReason.matchedInTitle = true;
-      }
-      
-      // Check if file name match (only if different from title)
-      if (this.plugin.settings.includeFilenameInSearch && 
-          file.basename !== displayName && 
-          fuzzyMatch(file.basename, query)) {
-        matches = true;
-        matchReason.matchedInFilename = true;
-      }
-      
-      // Check if alias match
-      if (this.plugin.settings.includeAliasesInSearch && aliases.length > 0) {
-        const aliasMatch = aliases.some(alias => fuzzyMatch(alias, query));
-        if (aliasMatch) {
-          matches = true;
-          matchReason.matchedInAlias = true;
+        matchType = 'title';
+      } else {
+        // Secondary match: search filename (with downranking)
+        if (this.plugin.settings.includeFilenameInSearch && file.basename !== displayName) {
+          const filenameMatch = search(file.basename);
+          if (filenameMatch && filenameMatch.matches.length > 0) {
+            matchReason.matchedInFilename = true;
+            // Downrank filename matches by -1
+            bestMatch = { ...filenameMatch, score: filenameMatch.score - 1 };
+            matchType = 'filename';
+          }
+        }
+        
+        // Tertiary match: search aliases (with downranking)
+        if (!matchType && this.plugin.settings.includeAliasesInSearch && aliases.length > 0) {
+          for (const alias of aliases) {
+            const aliasMatch = search(alias);
+            if (aliasMatch && aliasMatch.matches.length > 0) {
+              matchReason.matchedInAlias = true;
+              // Downrank alias matches by -1
+              bestMatch = { ...aliasMatch, score: aliasMatch.score - 1 };
+              matchType = 'alias';
+              break;
+            }
+          }
         }
       }
       
-      if (matches) {
-        suggestions.push({ file, display: displayName, isCustomDisplay });
-        existingFiles.add(file.basename.toLowerCase());
+      // If we have any match, add to results
+      if (bestMatch && bestMatch.matches.length > 0) {
+        const suggestion: SuggestionItem = { 
+          file, 
+          display: displayName, 
+          isCustomDisplay 
+        };
+        searchableSuggestions.push({ item: suggestion, match: bestMatch });
         this.matchReasons.set(file.path, matchReason);
       }
     }
+
+    // Use Obsidian's native sorting for exact vanilla compatibility
+    sortSearchResults(searchableSuggestions);
+    
+    // Extract suggestions from sorted results
+    const suggestions = searchableSuggestions.map(s => s.item);
 
     // If no suggestions found, add a "No match found" item
     if (suggestions.length === 0 && query) {
@@ -160,15 +204,7 @@ export class LinkTitleSuggest extends EditorSuggest<SuggestionItem> {
       });
     }
 
-    return this.sortSuggestions(suggestions, query);
-  }
-
-  sortSuggestions(suggestions: SuggestionItem[], query: string): SuggestionItem[] {
-    return suggestions.sort((a, b) => {
-      const aScore = getMatchScore(a.display, query, a.file?.basename ?? '', this.plugin.settings.includeFilenameInSearch);
-      const bScore = getMatchScore(b.display, query, b.file?.basename ?? '', this.plugin.settings.includeFilenameInSearch);
-      return bScore - aScore || a.display.localeCompare(b.display);
-    });
+    return suggestions;
   }
 
   renderSuggestion(suggestion: SuggestionItem, el: HTMLElement): void {

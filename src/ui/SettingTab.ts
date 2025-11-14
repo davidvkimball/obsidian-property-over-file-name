@@ -81,6 +81,18 @@ export class SettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
+      .setName('Use simple search for large vaults')
+      .setDesc('Use simple search instead of fuzzy search for better performance with very large vaults (thousands of files). Simple search is faster but less flexible than fuzzy search.')
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.useSimpleSearch)
+          .onChange(async (value) => {
+            this.plugin.settings.useSimpleSearch = value;
+            await this.plugin.saveData(this.plugin.settings);
+          })
+      );
+
+    new Setting(containerEl)
       .setName('When dragging notes')
       .setDesc('Use property-based titles when dragging notes from the file explorer.')
       .addToggle((toggle) =>
