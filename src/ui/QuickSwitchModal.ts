@@ -746,29 +746,27 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
   }
 
   onChooseItem(item: QuickSwitchItem['item'], evt: MouseEvent | KeyboardEvent): void {
-    // Handle unresolved links - create the file
+    // Handle unresolved links - create the file using openLinkText to respect new note location settings
     if ((item as any).isUnresolved) {
       const unresolvedText = (item as any).unresolvedText;
-      void this.app.vault
-        .create(`${unresolvedText}.md`, '')
-        .then((file) => {
-          void this.app.workspace.getLeaf().openFile(file);
-        })
-        .catch((err) => {
-          new Notice(`Error creating note: ${err.message}`);
-        });
+      const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+      const sourcePath = activeView?.file?.path || '';
+      
+      // Use openLinkText which respects Obsidian's default new note location settings
+      void this.app.workspace.openLinkText(unresolvedText, sourcePath).catch((err) => {
+        new Notice(`Error creating note: ${err.message}`);
+      });
       return;
     }
     
     if ('isNewNote' in item) {
-      void this.app.vault
-        .create(`${item.newName}.md`, '')
-        .then((file) => {
-          void this.app.workspace.getLeaf().openFile(file);
-        })
-        .catch((err) => {
-          new Notice(`Error creating note: ${err.message}`);
-        });
+      const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+      const sourcePath = activeView?.file?.path || '';
+      
+      // Use openLinkText which respects Obsidian's default new note location settings
+      void this.app.workspace.openLinkText(item.newName, sourcePath).catch((err) => {
+        new Notice(`Error creating note: ${err.message}`);
+      });
     } else {
       // Handle different modifier keys like default Obsidian
       if (evt instanceof KeyboardEvent) {
