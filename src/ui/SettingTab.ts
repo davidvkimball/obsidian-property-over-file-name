@@ -27,6 +27,7 @@ export class SettingTab extends PluginSettingTab {
             this.plugin.settings.propertyKey = value.trim() || 'title';
             await this.plugin.saveData(this.plugin.settings);
             this.plugin.updateLinkSuggester();
+            this.plugin.updateGraphView();
           })
       );
 
@@ -101,6 +102,19 @@ export class SettingTab extends PluginSettingTab {
           .onChange(async (value) => {
             this.plugin.settings.enableForDragDrop = value;
             await this.plugin.saveData(this.plugin.settings);
+          })
+      );
+
+    new Setting(containerEl)
+      .setName('In graph view')
+      .setDesc('Use the property instead of the file name as the note\'s title in graph view. Falls back to the file name when no property is set for that item.')
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.enableForGraphView)
+          .onChange(async (value) => {
+            this.plugin.settings.enableForGraphView = value;
+            await this.plugin.saveData(this.plugin.settings);
+            this.plugin.updateGraphView();
           })
       );
   }

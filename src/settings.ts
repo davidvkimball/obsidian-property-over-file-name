@@ -8,6 +8,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   includeAliasesInSearch: true,
   enableForDragDrop: true,
   useSimpleSearch: false,
+  enableForGraphView: true,
 };
 
 export function validateSettings(settings: PluginSettings): { isValid: boolean; errors: string[] } {

@@ -8,6 +8,7 @@ export interface PluginSettings {
   includeAliasesInSearch: boolean;
   enableForDragDrop: boolean;
   useSimpleSearch: boolean;
+  enableForGraphView: boolean;
 }
 
 export interface CachedFileData {
@@ -97,6 +98,7 @@ export interface PropertyOverFileNamePlugin extends Plugin {
   suggest?: EditorSuggest;
   updateLinkSuggester(): void;
   updateQuickSwitcher(): void;
+  updateGraphView(): void;
   rebuildCache(): void;
   saveSettings(prevQuickSwitcherState?: boolean): Promise<void>;
   saveData(data: PluginSettings): Promise<void>;

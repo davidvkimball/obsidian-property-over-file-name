@@ -7,6 +7,7 @@ import { registerCommands } from './commands';
 import { QuickSwitcherService } from './services/QuickSwitcherService';
 import { DragDropService } from './services/DragDropService';
 import { CacheService } from './services/CacheService';
+import { GraphViewService } from './services/GraphViewService';
 
 export default class PropertyOverFileNamePlugin extends Plugin {
   settings!: PluginSettings;
@@ -14,6 +15,7 @@ export default class PropertyOverFileNamePlugin extends Plugin {
   private quickSwitcherService!: QuickSwitcherService;
   private dragDropService!: DragDropService;
   private cacheService!: CacheService;
+  private graphViewService!: GraphViewService;
 
   async onload() {
     await this.loadSettings();
@@ -22,12 +24,23 @@ export default class PropertyOverFileNamePlugin extends Plugin {
     this.quickSwitcherService = new QuickSwitcherService(this);
     this.dragDropService = new DragDropService(this);
     this.cacheService = new CacheService(this);
+    this.graphViewService = new GraphViewService(this);
     
     // Wait a bit for metadata cache to be fully populated
     setTimeout(() => {
       this.updateLinkSuggester();
       this.updateQuickSwitcher();
     }, 1000);
+
+    // Set up graph view handling
+    this.app.workspace.onLayoutReady(() => {
+      this.graphViewService.onLayoutChange();
+    });
+    this.registerEvent(
+      this.app.workspace.on('layout-change', () => {
+        this.graphViewService.onLayoutChange();
+      })
+    );
 
     // Register file change events to invalidate cache
     this.registerEvent(
@@ -59,6 +72,10 @@ export default class PropertyOverFileNamePlugin extends Plugin {
       this.app.metadataCache.on('changed', (file) => {
         if (file instanceof TFile && file.extension === 'md') {
           this.cacheService.rebuildCache();
+          // Refresh graph view when metadata changes (to update visible nodes)
+          if (this.settings.enableForGraphView) {
+            this.graphViewService.refreshGraphView();
+          }
         }
       })
     );
@@ -119,6 +136,10 @@ export default class PropertyOverFileNamePlugin extends Plugin {
     this.quickSwitcherService.updateQuickSwitcher();
   }
 
+  updateGraphView() {
+    this.graphViewService.updateGraphView();
+  }
+
   rebuildCache() {
     this.cacheService.rebuildCache();
   }
@@ -132,6 +153,9 @@ export default class PropertyOverFileNamePlugin extends Plugin {
 
     // Restore the original Quick Switcher command
     this.quickSwitcherService.restoreOriginalCommand();
+
+    // Clean up graph view
+    this.graphViewService.onunload();
   }
 
   async loadSettings() {

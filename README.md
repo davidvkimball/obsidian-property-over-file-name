@@ -55,4 +55,9 @@ Content...
 - Issues: Check console (`Ctrl+Shift+I`) for errors like `Error setting cursor`.
 
 ## License
-MIT License
+
+This project is licensed under the GNU General Public License v3.0 (GPLv3).
+
+The graph view functionality is adapted from the [Node Masquerade](https://github.com/Kapirklaa/obsidian-node-masquerade) plugin by ElsaTam, which is also licensed under GPLv3. The code has been modified to integrate with this plugin and use the property key setting.
+
+See [LICENSE](LICENSE) for the full license text.
