@@ -1,6 +1,6 @@
 # Property Over File Name Plugin
 
-Enhances Obsidian's link suggester and Quick Switcher to use frontmatter properties (e.g., `title`) instead of file names for note titles, with optional file name and alias searching.
+Enhances Obsidian's link suggester, quick switcher, and graph view to use a specified property instead of file names for note titles.
 
 Particularly helpful when used in conjunction wth [Astro Composer](https://github.com/davidvkimball/obsidian-astro-composer) Obsidian plugin.
 
@@ -9,10 +9,11 @@ Particularly helpful when used in conjunction wth [Astro Composer](https://githu
 Part of the [Vault CMS](https://github.com/davidvkimball/vault-cms) project.
 
 ## Features
-- Displays frontmatter property (e.g., `title`) in link suggester (`[[`) and Quick Switcher (`Ctrl+O`).
-- Supports creating new notes via link suggester and Quick Switcher.
+- Displays property (like `title`) in link suggester, quick switcher, and graph view.
+- Supports creating new notes via link suggester and quick switcher.
 - Configurable to include file names and aliases in fuzzy searches.
-- Fully local, no network requests, respects user privacy.
+- Simple search toggle for larger vaults.
+- Also works when dragging notes from file explorer into a note.
 
 ## Installation
 
@@ -51,12 +52,13 @@ Content...
 ```
 - File name: `note.md`
 - Link suggester shows `My Custom Title`; searchable by `My Custom Title`, `note` (if file name search enabled), or `Alias1`/`Alias2` (if alias search enabled).
-- Quick Switcher shows `My Custom Title (note)` (if file name differs and search enabled).
+- Quick switcher shows `My Custom Title (note)` (if file name differs and search enabled).
+- Graph view shows "My Custom Title" instead of "note.md".
 
 ## Development
 - Build: `npm install && npm run build`
-- Test: Copy `main.js` and `manifest.json` to plugin folder, reload Obsidian.
-- Issues: Check console (`Ctrl+Shift+I`) for errors like `Error setting cursor`.
+- Test: Copy `main.js`, `manifest.json`, and `styles/css` to plugin folder, reload Obsidian.
+- Issues: Check console (`Ctrl+Shift+I`) for errors.
 
 ## License
 
