@@ -2,6 +2,9 @@
 
 Enhances Obsidian's link suggester, quick switcher, and graph view to use a specified property instead of file names for note titles.
 
+![property-over-file-name-preview](https://github.com/user-attachments/assets/60073f96-4855-47d0-88f5-b80fd03b4429)
+
+
 Particularly helpful when used in conjunction wth [Astro Composer](https://github.com/davidvkimball/obsidian-astro-composer) Obsidian plugin.
 
 ## Made for Vault CMS
