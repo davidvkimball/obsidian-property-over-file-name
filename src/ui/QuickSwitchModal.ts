@@ -1,4 +1,4 @@
-import { App, FuzzySuggestModal, MarkdownView, Notice, TFile, prepareFuzzySearch, prepareSimpleSearch, FuzzyMatch, sortSearchResults } from 'obsidian';
+import { App, FuzzySuggestModal, MarkdownView, Notice, TFile, prepareFuzzySearch, prepareSimpleSearch, FuzzyMatch, sortSearchResults, SearchResult } from 'obsidian';
 import { QuickSwitchItem, CachedFileData, SearchMatchReason, PropertyOverFileNamePlugin, WorkspaceInternal, QuickSwitcherPluginInstance, UnresolvedLinkItem, NewNoteItem, AppInternal } from '../types';
 import { buildFileCache } from '../utils/search';
 
@@ -324,8 +324,7 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
 
     // Use cached data for much faster search
     for (const cachedData of this.fileCache.values()) {
-      const { file, displayName, aliases } = cachedData;
-      const text = this.getItemText(file);
+      const { file, displayName, aliases, isCustomDisplay } = cachedData;
       
       // Track which fields caused the match
       const matchReason: SearchMatchReason = {
@@ -334,16 +333,24 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
         matchedInAlias: false
       };
       
-      // Primary match: search title/property first
-      let primaryMatch = search(text);
-      let bestMatch = primaryMatch;
+      // Primary match: search title/property first (only if note has custom display)
+      let primaryMatch: SearchResult | null = null;
+      let bestMatch: SearchResult | null = null;
       let matchType: 'title' | 'filename' | 'alias' | null = null;
       
-      if (primaryMatch && primaryMatch.matches.length > 0) {
-        matchReason.matchedInTitle = true;
-        matchType = 'title';
-      } else {
-        // Secondary match: search filename (with downranking)
+      if (isCustomDisplay) {
+        // Only search title/property if note actually has a custom property
+        primaryMatch = search(displayName);
+        if (primaryMatch && primaryMatch.matches.length > 0) {
+          matchReason.matchedInTitle = true;
+          bestMatch = primaryMatch;
+          matchType = 'title';
+        }
+      }
+      
+      // If no title match (or note doesn't have property), search filename
+      if (!matchType) {
+        // Search filename if it's different from displayName, or if note doesn't have property
         if (this.plugin.settings.includeFilenameInSearch && file.basename !== displayName) {
           const filenameMatch = search(file.basename);
           if (filenameMatch && filenameMatch.matches.length > 0) {
@@ -352,19 +359,28 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
             bestMatch = { ...filenameMatch, score: filenameMatch.score - 1 };
             matchType = 'filename';
           }
+        } else if (!isCustomDisplay) {
+          // If note doesn't have property, displayName equals filename, so search filename
+          const filenameMatch = search(file.basename);
+          if (filenameMatch && filenameMatch.matches.length > 0) {
+            matchReason.matchedInFilename = true;
+            bestMatch = filenameMatch;
+            matchType = 'filename';
+          }
         }
-        
-        // Tertiary match: search aliases (with downranking)
-        if (!matchType && this.plugin.settings.includeAliasesInSearch && aliases.length > 0) {
-          for (const alias of aliases) {
-            const aliasMatch = search(alias);
-            if (aliasMatch && aliasMatch.matches.length > 0) {
-              matchReason.matchedInAlias = true;
-              // Downrank alias matches by -1
-              bestMatch = { ...aliasMatch, score: aliasMatch.score - 1 };
-              matchType = 'alias';
-              break;
-            }
+      }
+      
+      // Tertiary match: search aliases (with downranking)
+      if (!matchType && this.plugin.settings.includeAliasesInSearch && aliases.length > 0) {
+        for (const alias of aliases) {
+          const aliasMatch = search(alias);
+          if (aliasMatch && aliasMatch.matches.length > 0) {
+            matchReason.matchedInAlias = true;
+            matchReason.matchedAliasText = alias; // Store which alias matched
+            // Downrank alias matches by -1
+            bestMatch = { ...aliasMatch, score: aliasMatch.score - 1 };
+            matchType = 'alias';
+            break;
           }
         }
       }
@@ -516,76 +532,91 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
         el.setText(text);
         return;
       }
-      const matchReason = this.matchReasons.get(item.path);
-      const shouldShowIcon = matchReason && (matchReason.matchedInTitle || matchReason.matchedInFilename || matchReason.matchedInAlias);
       
-      if (shouldShowIcon) {
-        // Add mod-complex class to match Obsidian's structure
+      // Check if this file has a custom property
+      const cachedData = this.fileCache.get(item.path);
+      const isCustomDisplay = cachedData?.isCustomDisplay ?? false;
+      const matchReason = this.matchReasons.get(item.path);
+      
+      // Special case: notes without property that matched via alias should show alias with icon
+      if (!isCustomDisplay && matchReason?.matchedInAlias && matchReason.matchedAliasText) {
+        // Show alias as main text, filename below, with alias icon (like default Obsidian)
         el.addClass('mod-complex');
-
-        // Create the main suggestion container
         const suggestionContent = el.createDiv({ cls: 'suggestion-content' });
         
-        // Main title
+        // Main title - show the alias that matched
         const titleEl = suggestionContent.createDiv({ cls: 'suggestion-title' });
-        titleEl.setText(text);
+        titleEl.setText(matchReason.matchedAliasText);
         
         // File path below
-        if (item instanceof TFile) {
-          const pathEl = suggestionContent.createDiv({ cls: 'suggestion-note' });
-          pathEl.setText(item.path.replace('.md', ''));
-        }
+        const pathEl = suggestionContent.createDiv({ cls: 'suggestion-note' });
+        pathEl.setText(item.path.replace('.md', ''));
         
-        // Add suggestion-aux with appropriate icon based on match reason
+        // Add suggestion-aux with alias icon
         const suggestionAux = el.createDiv({ cls: 'suggestion-aux' });
         const suggestionFlair = suggestionAux.createSpan({ 
           cls: 'suggestion-flair', 
-          attr: { 'aria-label': this.getIconLabel(matchReason) } 
+          attr: { 'aria-label': 'Alias Match' } 
         });
+        this.createForwardIcon(suggestionFlair);
+      } else if (isCustomDisplay) {
+        // Notes with the property - keep existing behavior
+        const shouldShowIcon = matchReason && (matchReason.matchedInTitle || matchReason.matchedInFilename || matchReason.matchedInAlias);
         
-        // Determine icon based on priority: title > file name > alias
-        if (matchReason.matchedInTitle) {
-          // Type icon for title/property matches
+        if (shouldShowIcon) {
+          // Add mod-complex class to match Obsidian's structure
+          el.addClass('mod-complex');
+
+          // Create the main suggestion container
+          const suggestionContent = el.createDiv({ cls: 'suggestion-content' });
+          
+          // Main title
+          const titleEl = suggestionContent.createDiv({ cls: 'suggestion-title' });
+          titleEl.setText(text);
+          
+          // File path below
+          const pathEl = suggestionContent.createDiv({ cls: 'suggestion-note' });
+          pathEl.setText(item.path.replace('.md', ''));
+          
+          // Add suggestion-aux with appropriate icon based on match reason
+          const suggestionAux = el.createDiv({ cls: 'suggestion-aux' });
+          const suggestionFlair = suggestionAux.createSpan({ 
+            cls: 'suggestion-flair', 
+            attr: { 'aria-label': this.getIconLabel(matchReason) } 
+          });
+          
+          // Determine icon based on priority: title > file name > alias
+          if (matchReason.matchedInTitle) {
+            // Type icon for title/property matches
+            this.createTypeIcon(suggestionFlair);
+          } else if (matchReason.matchedInFilename) {
+            // File icon for file name matches
+            this.createFileIcon(suggestionFlair);
+          } else if (matchReason.matchedInAlias) {
+            // Arrow icon for alias matches
+            this.createForwardIcon(suggestionFlair);
+          }
+        } else {
+          // Note has property but no match reason (e.g., recent files)
+          // Show complex layout with icon if using property-based title
+          el.addClass('mod-complex');
+          const suggestionContent = el.createDiv({ cls: 'suggestion-content' });
+          const titleEl = suggestionContent.createDiv({ cls: 'suggestion-title' });
+          titleEl.setText(text);
+          const pathEl = suggestionContent.createDiv({ cls: 'suggestion-note' });
+          pathEl.setText(item.path.replace('.md', ''));
+          
+          // Show "T" icon for property-based titles
+          const suggestionAux = el.createDiv({ cls: 'suggestion-aux' });
+          const suggestionFlair = suggestionAux.createSpan({ 
+            cls: 'suggestion-flair', 
+            attr: { 'aria-label': 'Property-based title' } 
+          });
           this.createTypeIcon(suggestionFlair);
-        } else if (matchReason.matchedInFilename) {
-          // File icon for file name matches
-          this.createFileIcon(suggestionFlair);
-        } else if (matchReason.matchedInAlias) {
-          // Arrow icon for alias matches
-          this.createForwardIcon(suggestionFlair);
         }
       } else {
-        // For recent files, use complex layout with appropriate icons
-        // Add mod-complex class to match Obsidian's structure
-        el.addClass('mod-complex');
-
-        // Create the main suggestion container
-        const suggestionContent = el.createDiv({ cls: 'suggestion-content' });
-        
-        // Main title
-        const titleEl = suggestionContent.createDiv({ cls: 'suggestion-title' });
-        titleEl.setText(text);
-        
-        // File path below
-        if (item instanceof TFile) {
-          const pathEl = suggestionContent.createDiv({ cls: 'suggestion-note' });
-          pathEl.setText(item.path.replace('.md', ''));
-        }
-        
-        // Add suggestion-aux with appropriate icon
-        const suggestionAux = el.createDiv({ cls: 'suggestion-aux' });
-        const suggestionFlair = suggestionAux.createSpan({ 
-          cls: 'suggestion-flair', 
-          attr: { 'aria-label': 'Property-based title' } 
-        });
-        
-        // Show "T" icon only if we're using a property-based title (not filename)
-        const isUsingProperty = item instanceof TFile && this.getDisplayName(item) !== item.basename;
-        if (isUsingProperty) {
-          // Type icon for property-based titles
-          this.createTypeIcon(suggestionFlair);
-        }
-        // No icon for file name-based display
+        // For notes without the property (and not matched via alias), show simple display (no icon, no duplicate name)
+        el.setText(text);
       }
     }
   }

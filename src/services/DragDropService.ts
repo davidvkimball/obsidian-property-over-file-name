@@ -27,14 +27,18 @@ export class DragDropService {
       return;
     }
 
-    // Get the display name from frontmatter
+    // Get the display name from frontmatter (only if property exists)
     const displayName = this.getDisplayName(file);
 
-    // Don't prevent default - let Obsidian insert the default link first
-    // Then we'll replace it with our custom display text
-    setTimeout(() => {
-      this.replaceLastInsertedLink(file, displayName, editor);
-    }, 50);
+    // Only replace link if the file has the property
+    // Otherwise, let Obsidian use default behavior (no display text)
+    if (displayName !== null) {
+      // Don't prevent default - let Obsidian insert the default link first
+      // Then we'll replace it with our custom display text
+      setTimeout(() => {
+        this.replaceLastInsertedLink(file, displayName, editor);
+      }, 50);
+    }
   }
 
   handleDOMDrop(event: DragEvent): void {
@@ -73,32 +77,37 @@ export class DragDropService {
       return;
     }
 
-    // Get the display name from frontmatter
+    // Get the display name from frontmatter (only if property exists)
     const displayName = this.getDisplayName(file);
 
-    // Don't prevent default - let Obsidian insert the default link first
-    // Then we'll replace it with our custom display text
-    setTimeout(() => {
-      const activeView = this.plugin.app.workspace.getActiveViewOfType(MarkdownView);
-      if (activeView && activeView.editor) {
-        this.replaceLastInsertedLink(file, displayName, activeView.editor);
-      }
-    }, 50);
+    // Only replace link if the file has the property
+    // Otherwise, let Obsidian use default behavior (no display text)
+    if (displayName !== null) {
+      // Don't prevent default - let Obsidian insert the default link first
+      // Then we'll replace it with our custom display text
+      setTimeout(() => {
+        const activeView = this.plugin.app.workspace.getActiveViewOfType(MarkdownView);
+        if (activeView && activeView.editor) {
+          this.replaceLastInsertedLink(file, displayName, activeView.editor);
+        }
+      }, 50);
+    }
   }
 
-  private getDisplayName(file: TFile): string {
+  private getDisplayName(file: TFile): string | null {
     const fileCache = this.plugin.app.metadataCache.getFileCache(file);
     const frontmatter = fileCache?.frontmatter;
-    let displayName = file.basename; // Default to file name
     
+    // Only return display name if the property exists and has a value
+    // Return null if property doesn't exist (to indicate we should use default behavior)
     if (frontmatter && frontmatter[this.plugin.settings.propertyKey] !== undefined && frontmatter[this.plugin.settings.propertyKey] !== null) {
       const propertyValue = String(frontmatter[this.plugin.settings.propertyKey]).trim();
       if (propertyValue !== '') {
-        displayName = propertyValue; // Use frontmatter title
+        return propertyValue; // Use frontmatter title
       }
     }
 
-    return displayName;
+    return null; // No property - use default Obsidian behavior
   }
 
   private replaceLastInsertedLink(file: TFile, displayName: string, editor: Editor): void {

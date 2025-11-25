@@ -142,16 +142,24 @@ export class LinkTitleSuggest extends EditorSuggest<SuggestionItem> {
         matchedInAlias: false
       };
       
-      // Primary match: search title/property first
-      let primaryMatch = search(displayName);
-      let bestMatch: SearchResult | null = primaryMatch;
+      // Primary match: search title/property first (only if note has custom display)
+      let primaryMatch: SearchResult | null = null;
+      let bestMatch: SearchResult | null = null;
       let matchType: 'title' | 'filename' | 'alias' | null = null;
       
-      if (primaryMatch && primaryMatch.matches.length > 0) {
-        matchReason.matchedInTitle = true;
-        matchType = 'title';
-      } else {
-        // Secondary match: search filename (with downranking)
+      if (isCustomDisplay) {
+        // Only search title/property if note actually has a custom property
+        primaryMatch = search(displayName);
+        if (primaryMatch && primaryMatch.matches.length > 0) {
+          matchReason.matchedInTitle = true;
+          bestMatch = primaryMatch;
+          matchType = 'title';
+        }
+      }
+      
+      // If no title match (or note doesn't have property), search filename
+      if (!matchType) {
+        // Search filename if it's different from displayName, or if note doesn't have property
         if (this.plugin.settings.includeFilenameInSearch && file.basename !== displayName) {
           const filenameMatch = search(file.basename);
           if (filenameMatch && filenameMatch.matches.length > 0) {
@@ -160,14 +168,24 @@ export class LinkTitleSuggest extends EditorSuggest<SuggestionItem> {
             bestMatch = { ...filenameMatch, score: filenameMatch.score - 1 };
             matchType = 'filename';
           }
+        } else if (!isCustomDisplay) {
+          // If note doesn't have property, displayName equals filename, so search filename
+          const filenameMatch = search(file.basename);
+          if (filenameMatch && filenameMatch.matches.length > 0) {
+            matchReason.matchedInFilename = true;
+            bestMatch = filenameMatch;
+            matchType = 'filename';
+          }
         }
-        
+      }
+      
         // Tertiary match: search aliases (with downranking)
         if (!matchType && this.plugin.settings.includeAliasesInSearch && aliases.length > 0) {
           for (const alias of aliases) {
             const aliasMatch = search(alias);
             if (aliasMatch && aliasMatch.matches.length > 0) {
               matchReason.matchedInAlias = true;
+              matchReason.matchedAliasText = alias; // Store which alias matched
               // Downrank alias matches by -1
               bestMatch = { ...aliasMatch, score: aliasMatch.score - 1 };
               matchType = 'alias';
@@ -175,7 +193,6 @@ export class LinkTitleSuggest extends EditorSuggest<SuggestionItem> {
             }
           }
         }
-      }
       
       // If we have any match, add to results
       if (bestMatch && bestMatch.matches.length > 0) {
@@ -259,46 +276,73 @@ export class LinkTitleSuggest extends EditorSuggest<SuggestionItem> {
     if (suggestion.file) {
       // Get the match reason for this file
       const matchReason = this.matchReasons.get(suggestion.file.path);
-      const shouldShowIcon = matchReason && (matchReason.matchedInTitle || matchReason.matchedInFilename || matchReason.matchedInAlias);
       
-      if (shouldShowIcon) {
-        // Add mod-complex class to match Obsidian's structure
+      // Special case: notes without property that matched via alias should show alias with icon
+      if (!suggestion.isCustomDisplay && matchReason?.matchedInAlias && matchReason.matchedAliasText) {
+        // Show alias as main text, filename below, with alias icon (like default Obsidian)
         el.addClass('mod-complex');
-
-        // Create the main suggestion container
         const suggestionContent = el.createDiv({ cls: 'suggestion-content' });
         
-        // Main title
+        // Main title - show the alias that matched
         const titleEl = suggestionContent.createDiv({ cls: 'suggestion-title' });
-        titleEl.setText(suggestion.display);
+        titleEl.setText(matchReason.matchedAliasText);
         
         // File path below
         const pathEl = suggestionContent.createDiv({ cls: 'suggestion-note' });
         pathEl.setText(suggestion.file.path.replace('.md', ''));
         
-        // Add suggestion-aux with appropriate icon based on match reason
+        // Add suggestion-aux with alias icon
         const suggestionAux = el.createDiv({ cls: 'suggestion-aux' });
         const suggestionFlair = suggestionAux.createSpan({ 
           cls: 'suggestion-flair', 
-          attr: { 'aria-label': this.getIconLabel(matchReason) } 
+          attr: { 'aria-label': 'Alias Match' } 
         });
+        this.createForwardIcon(suggestionFlair);
+      } else if (suggestion.isCustomDisplay) {
+        // Notes with the property - keep existing behavior
+        const shouldShowIcon = matchReason && (matchReason.matchedInTitle || matchReason.matchedInFilename || matchReason.matchedInAlias);
         
-        // Determine icon based on priority: title > file name > alias
-        if (matchReason.matchedInTitle) {
-          // Type icon for title/property matches
-          this.createTypeIcon(suggestionFlair);
-        } else if (matchReason.matchedInFilename) {
-          // File icon for file name matches
-          this.createFileIcon(suggestionFlair);
-        } else if (matchReason.matchedInAlias) {
-          // Arrow icon for alias matches
-          this.createForwardIcon(suggestionFlair);
+        if (shouldShowIcon) {
+          // Add mod-complex class to match Obsidian's structure
+          el.addClass('mod-complex');
+
+          // Create the main suggestion container
+          const suggestionContent = el.createDiv({ cls: 'suggestion-content' });
+          
+          // Main title
+          const titleEl = suggestionContent.createDiv({ cls: 'suggestion-title' });
+          titleEl.setText(suggestion.display);
+          
+          // File path below
+          const pathEl = suggestionContent.createDiv({ cls: 'suggestion-note' });
+          pathEl.setText(suggestion.file.path.replace('.md', ''));
+          
+          // Add suggestion-aux with appropriate icon based on match reason
+          const suggestionAux = el.createDiv({ cls: 'suggestion-aux' });
+          const suggestionFlair = suggestionAux.createSpan({ 
+            cls: 'suggestion-flair', 
+            attr: { 'aria-label': this.getIconLabel(matchReason) } 
+          });
+          
+          // Determine icon based on priority: title > file name > alias
+          if (matchReason.matchedInTitle) {
+            // Type icon for title/property matches
+            this.createTypeIcon(suggestionFlair);
+          } else if (matchReason.matchedInFilename) {
+            // File icon for file name matches
+            this.createFileIcon(suggestionFlair);
+          } else if (matchReason.matchedInAlias) {
+            // Arrow icon for alias matches
+            this.createForwardIcon(suggestionFlair);
+          }
+        } else {
+          // Note has property but no match reason (shouldn't happen, but handle gracefully)
+          // Show simple display with just the display name
+          el.setText(suggestion.display);
         }
       } else {
-        // For normal file name results, show like default Obsidian (no icon)
-        const content = el.createDiv({ cls: 'suggestion-content' });
-        content.createDiv({ cls: 'suggestion-title', text: suggestion.display });
-        content.createDiv({ cls: 'suggestion-note', text: suggestion.file.path.replace('.md', '') });
+        // For notes without the property (and not matched via alias), show simple display (no icon, no duplicate name)
+        el.setText(suggestion.display);
       }
     }
   }
@@ -456,11 +500,23 @@ export class LinkTitleSuggest extends EditorSuggest<SuggestionItem> {
     const useMarkdownLinks = vault.getConfig?.('useMarkdownLinks') ?? false;
     let linkText: string;
 
-    if (useMarkdownLinks) {
-      linkText = `[${suggestion.display}](${encodeURI(suggestion.file.path)})`;
+    // Only add display text if the note has the custom property
+    // Otherwise, use default Obsidian behavior (no display text)
+    if (suggestion.isCustomDisplay) {
+      if (useMarkdownLinks) {
+        linkText = `[${suggestion.display}](${encodeURI(suggestion.file.path)})`;
+      } else {
+        const linkPath = suggestion.file.path.replace('.md', '');
+        linkText = `[[${linkPath}|${suggestion.display}]]`;
+      }
     } else {
-      const linkPath = suggestion.file.path.replace('.md', '');
-      linkText = `[[${linkPath}|${suggestion.display}]]`;
+      // Default Obsidian behavior - no display text
+      if (useMarkdownLinks) {
+        linkText = `[${suggestion.file.path.replace('.md', '')}](${encodeURI(suggestion.file.path)})`;
+      } else {
+        const linkPath = suggestion.file.path.replace('.md', '');
+        linkText = `[[${linkPath}]]`;
+      }
     }
     editor.replaceRange(linkText, { line: start.line, ch: start.ch }, endPos);
     const newCursorPos = start.ch + linkText.length;

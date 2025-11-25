@@ -23,6 +23,7 @@ export interface SearchMatchReason {
   matchedInTitle: boolean;
   matchedInFilename: boolean;
   matchedInAlias: boolean;
+  matchedAliasText?: string; // The alias text that matched (for display purposes)
 }
 
 export interface SuggestionItem {
