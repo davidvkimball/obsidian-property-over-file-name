@@ -2,7 +2,11 @@
 
 Enhances Obsidian's link suggester and Quick Switcher to use frontmatter properties (e.g., `title`) instead of file names for note titles, with optional file name and alias searching.
 
-Particularly helpful when used in conjunction wth [Astro Composer](https://github.com/davidvkimball/obsidian-astro-composer) Obsidian Plugin and the [Astro Modular](https://github.com/davidvkimball/astro-modular) blog theme.
+Particularly helpful when used in conjunction wth [Astro Composer](https://github.com/davidvkimball/obsidian-astro-composer) Obsidian plugin.
+
+## Made for Vault CMS
+
+Part of the [Vault CMS](https://github.com/davidvkimball/vault-cms) project.
 
 ## Features
 - Displays frontmatter property (e.g., `title`) in link suggester (`[[`) and Quick Switcher (`Ctrl+O`).
