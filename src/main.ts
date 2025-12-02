@@ -8,6 +8,10 @@ import { QuickSwitcherService } from './services/QuickSwitcherService';
 import { DragDropService } from './services/DragDropService';
 import { CacheService } from './services/CacheService';
 import { GraphViewService } from './services/GraphViewService';
+import { BacklinkService } from './services/BacklinkService';
+import { TabService } from './services/TabService';
+import { ExplorerService } from './services/ExplorerService';
+import { WindowFrameService } from './services/WindowFrameService';
 
 export default class PropertyOverFileNamePlugin extends Plugin {
   settings!: PluginSettings;
@@ -16,6 +20,10 @@ export default class PropertyOverFileNamePlugin extends Plugin {
   private dragDropService!: DragDropService;
   private cacheService!: CacheService;
   private graphViewService!: GraphViewService;
+  private backlinkService!: BacklinkService;
+  private tabService!: TabService;
+  private explorerService!: ExplorerService;
+  private windowFrameService!: WindowFrameService;
 
   async onload() {
     await this.loadSettings();
@@ -25,20 +33,48 @@ export default class PropertyOverFileNamePlugin extends Plugin {
     this.dragDropService = new DragDropService(this);
     this.cacheService = new CacheService(this);
     this.graphViewService = new GraphViewService(this);
+    this.backlinkService = new BacklinkService(this);
+    this.tabService = new TabService(this);
+    this.explorerService = new ExplorerService(this);
+    this.windowFrameService = new WindowFrameService(this);
+    
+    // Register tab service events and rename tabs immediately
+    this.tabService.registerEvents();
+    await this.tabService.renameTabs();
+    
+    // Register explorer and window frame services
+    this.explorerService.registerEvents();
+    this.windowFrameService.registerEvents();
     
     // Wait a bit for metadata cache to be fully populated
     setTimeout(() => {
       this.updateLinkSuggester();
       this.updateQuickSwitcher();
+      this.updateBacklinks();
+      this.updateTabs();
+      this.updateExplorer();
+      this.updateWindowFrame();
     }, 1000);
 
     // Set up graph view handling
     this.app.workspace.onLayoutReady(() => {
       this.graphViewService.onLayoutChange();
+      this.backlinkService.onLayoutChange();
+      this.tabService.renameTabs();
+      this.updateExplorer();
+      this.updateWindowFrame();
     });
     this.registerEvent(
       this.app.workspace.on('layout-change', () => {
         this.graphViewService.onLayoutChange();
+        this.backlinkService.onLayoutChange();
+      })
+    );
+
+    // Set up backlinks handling
+    this.registerEvent(
+      this.app.workspace.on('file-open', () => {
+        this.backlinkService.onFileOpen();
       })
     );
 
@@ -75,6 +111,18 @@ export default class PropertyOverFileNamePlugin extends Plugin {
           // Refresh graph view when metadata changes (to update visible nodes)
           if (this.settings.enableForGraphView) {
             this.graphViewService.refreshGraphView();
+          }
+          // Refresh backlinks when metadata changes
+          if (this.settings.enableForBacklinks) {
+            this.backlinkService.updateBacklinks();
+          }
+          // Refresh explorer when metadata changes
+          if (this.settings.enableForExplorer) {
+            this.explorerService.updateExplorer();
+          }
+          // Refresh window frame when metadata changes
+          if (this.settings.enableForWindowFrame) {
+            this.windowFrameService.updateWindowFrame();
           }
         }
       })
@@ -140,6 +188,22 @@ export default class PropertyOverFileNamePlugin extends Plugin {
     this.graphViewService.updateGraphView();
   }
 
+  updateBacklinks() {
+    this.backlinkService.updateBacklinks();
+  }
+
+  updateTabs() {
+    this.tabService.updateTabs();
+  }
+
+  updateExplorer() {
+    this.explorerService.updateExplorer();
+  }
+
+  updateWindowFrame() {
+    this.windowFrameService.updateWindowFrame();
+  }
+
   rebuildCache() {
     this.cacheService.rebuildCache();
   }
@@ -156,17 +220,35 @@ export default class PropertyOverFileNamePlugin extends Plugin {
 
     // Clean up graph view
     this.graphViewService.onunload();
+
+    // Clean up backlinks service
+    this.backlinkService.onunload();
+
+    // Clean up tab service
+    this.tabService.onunload();
+
+    // Clean up explorer service
+    this.explorerService.onunload();
+
+    // Clean up window frame service
+    this.windowFrameService.onunload();
   }
 
   async loadSettings() {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
   }
 
-  async saveSettings(prevQuickSwitcherState?: boolean) {
+  async saveSettings(prevQuickSwitcherState?: boolean, prevTabState?: boolean) {
     await this.saveData(this.settings);
     // Only update components when relevant settings change
     if (prevQuickSwitcherState !== undefined && prevQuickSwitcherState !== this.settings.enableForQuickSwitcher) {
       this.updateQuickSwitcher();
+    }
+    if (prevTabState !== undefined && prevTabState !== this.settings.enableForTabs) {
+      if (this.settings.enableForTabs) {
+        this.tabService.registerEvents();
+      }
+      this.updateTabs();
     }
   }
 }

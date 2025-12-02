@@ -1,4 +1,4 @@
-import { TFile, Plugin } from 'obsidian';
+import { TFile, TFolder, Plugin, Workspace } from 'obsidian';
 
 export interface PluginSettings {
   propertyKey: string;
@@ -9,6 +9,11 @@ export interface PluginSettings {
   enableForDragDrop: boolean;
   useSimpleSearch: boolean;
   enableForGraphView: boolean;
+  enableForBacklinks: boolean;
+  enableForTabs: boolean;
+  enableForExplorer: boolean;
+  folderNoteFilename: string;
+  enableForWindowFrame: boolean;
 }
 
 export interface CachedFileData {
@@ -100,12 +105,36 @@ export interface PropertyOverFileNamePlugin extends Plugin {
   updateLinkSuggester(): void;
   updateQuickSwitcher(): void;
   updateGraphView(): void;
+  updateBacklinks(): void;
+  updateTabs(): void;
+  updateExplorer(): void;
+  updateWindowFrame(): void;
   rebuildCache(): void;
-  saveSettings(prevQuickSwitcherState?: boolean): Promise<void>;
+  saveSettings(prevQuickSwitcherState?: boolean, prevTabState?: boolean): Promise<void>;
   saveData(data: PluginSettings): Promise<void>;
 }
 
 export interface EditorSuggest {
   updateFileCache(file: TFile): void;
   buildFileCache(): void;
+}
+
+// File Explorer types
+export interface TFileExplorerItem {
+  file: TFile | TFolder;
+  selfEl: HTMLDivElement;
+  innerEl: HTMLDivElement;
+  updateTitle(): void;
+  startRename(): void;
+  getTitle(): string;
+}
+
+export interface TFileExplorerView {
+  fileItems: {
+    [K: string]: TFileExplorerItem;
+  };
+}
+
+export interface WorkspaceExt extends Workspace {
+  updateTitle(): void;
 }

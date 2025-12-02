@@ -9,6 +9,11 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   enableForDragDrop: true,
   useSimpleSearch: false,
   enableForGraphView: true,
+  enableForBacklinks: true,
+  enableForTabs: true,
+  enableForExplorer: false,
+  folderNoteFilename: '',
+  enableForWindowFrame: true,
 };
 
 export function validateSettings(settings: PluginSettings): { isValid: boolean; errors: string[] } {
