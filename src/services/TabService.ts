@@ -92,12 +92,15 @@ export class TabService {
    * Register event listeners for tab renaming
    */
   registerEvents() {
+    // Always start observing to mark tabs as processed (even when disabled)
+    // This ensures tabs are visible even when the feature is off
+    this.startObserving();
+
     if (!this.plugin.settings.enableForTabs) {
+      // When disabled, still mark tabs as processed but don't register rename events
+      this.renameTabs();
       return;
     }
-
-    // Start observing DOM for new tabs
-    this.startObserving();
 
     // Rename tabs when layout changes
     this.plugin.registerEvent(
@@ -135,6 +138,7 @@ export class TabService {
     }
 
     // Override setText on title elements to intercept immediately
+    // This is needed even when disabled to mark tabs as processed
     this.overrideSetText();
     
     // Also override any new title elements that get created
@@ -159,7 +163,7 @@ export class TabService {
               if (tabHeader) {
                 // Override setText for this tab's title element
                 this.overrideTitleElement(tabHeader);
-                // Rename synchronously to prevent flicker
+                // Mark tab as processed (and rename if enabled)
                 this.renameTab(tabHeader);
               }
             }
@@ -173,7 +177,7 @@ export class TabService {
             if (tabHeader) {
               // Override setText for this tab's title element
               this.overrideTitleElement(tabHeader);
-              // Rename synchronously to prevent flicker
+              // Mark tab as processed (and rename if enabled)
               this.renameTab(tabHeader);
             }
           }
@@ -216,7 +220,10 @@ export class TabService {
       
       // Override setText to intercept and replace with property value
       (titleEl as any).setText = (text: string) => {
-        // First, check if we should replace it BEFORE calling original
+        // Always mark as processed first to ensure tab is visible
+        tabHeader.setAttribute('data-pov-processed', 'true');
+        
+        // Check if we should replace it (only if feature is enabled)
         const shouldReplace = this.shouldReplaceTitle(tabHeader, text);
         
         if (shouldReplace.newText) {
@@ -228,9 +235,6 @@ export class TabService {
           // Call original to maintain Obsidian's behavior
           originalSetText.call(titleEl, text);
         }
-        
-        // Mark as processed
-        tabHeader.setAttribute('data-pov-processed', 'true');
       };
       
       this.modifiedElements.add(titleEl);

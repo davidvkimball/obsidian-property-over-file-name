@@ -83,7 +83,7 @@ export class ExplorerService {
    */
   private updateAllItems() {
     const view = this.getExplorerView();
-    if (!view) {
+    if (!view || !view.fileItems) {
       return;
     }
 
@@ -101,7 +101,7 @@ export class ExplorerService {
    */
   private restoreAllItems() {
     const view = this.getExplorerView();
-    if (!view) {
+    if (!view || !view.fileItems) {
       return;
     }
 

@@ -245,9 +245,9 @@ export default class PropertyOverFileNamePlugin extends Plugin {
       this.updateQuickSwitcher();
     }
     if (prevTabState !== undefined && prevTabState !== this.settings.enableForTabs) {
-      if (this.settings.enableForTabs) {
-        this.tabService.registerEvents();
-      }
+      // Always re-register events to ensure tabs are marked as processed
+      // (even when disabled, we need to mark tabs so they're visible)
+      this.tabService.registerEvents();
       this.updateTabs();
     }
   }
