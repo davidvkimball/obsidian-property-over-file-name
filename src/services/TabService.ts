@@ -28,20 +28,33 @@ export class TabService {
    * Falls back to file basename if property is not found
    */
   async renameTabs() {
-    const leaves = this.plugin.app.workspace.getLeavesOfType('markdown');
-    
-    // Always mark tabs as processed to ensure they're visible
-    // (even if feature is disabled, we still need to show tabs)
-    leaves.forEach((leaf) => {
-      const tabHeaderEl = (leaf as any).tabHeaderEl as HTMLElement | undefined;
-      if (tabHeaderEl) {
-        tabHeaderEl.setAttribute('data-pov-processed', 'true');
-      }
+    // First, mark ALL tabs as processed to ensure they're visible
+    // This includes tabs from other plugins (GridExplorer, HomeTab, etc.)
+    // Query all tab headers from the DOM to catch all tabs regardless of type
+    const allTabHeaders = document.querySelectorAll('.workspace-tab-header');
+    allTabHeaders.forEach((tabHeader) => {
+      (tabHeader as HTMLElement).setAttribute('data-pov-processed', 'true');
     });
+    
+    // Also mark tabs from known leaf types to ensure coverage
+    // This helps catch tabs that might be created before DOM is ready
+    const knownViewTypes = ['markdown', 'graph', 'localgraph', 'backlink', 'file-explorer'];
+    for (const viewType of knownViewTypes) {
+      const leaves = this.plugin.app.workspace.getLeavesOfType(viewType);
+      leaves.forEach((leaf) => {
+        const tabHeaderEl = (leaf as any).tabHeaderEl as HTMLElement | undefined;
+        if (tabHeaderEl) {
+          tabHeaderEl.setAttribute('data-pov-processed', 'true');
+        }
+      });
+    }
     
     if (!this.plugin.settings.enableForTabs) {
       return;
     }
+    
+    // Now process only markdown leaves for renaming
+    const leaves = this.plugin.app.workspace.getLeavesOfType('markdown');
 
     leaves.forEach((leaf) => {
       /*
@@ -57,34 +70,41 @@ export class TabService {
         leaf.setViewState({ type: state.type, state: state.state });
       }
 
-      if (view?.file) {
-        const file = view.file;
-        const cache = this.plugin.app.metadataCache.getFileCache(file);
-        const propertyValue = cache?.frontmatter?.[this.plugin.settings.propertyKey];
-        const tabHeaderEl = (leaf as any).tabHeaderEl as HTMLElement | undefined;
-        
-        /*
-         * Possible alternatives (from deepseek-r1)
-         *
-         * Method 2: Find via Obsidian official API
-         * 1. const tabHeaderEl = this.app.workspace.getActiveTabHeader(view.leaf);
-         *
-         * Method 3: Deep DOM traversal (better compatibility)
-         * 2. const tabHeaderEl = this.findTabHeaderByView(view);
-         */
-        if (tabHeaderEl) {
-          const titleEl = tabHeaderEl.querySelector('.workspace-tab-header-inner-title');
-          if (titleEl) {
-            titleEl.setText(propertyValue || file.basename);
-          }
+        if (view?.file) {
+          const file = view.file;
+          const cache = this.plugin.app.metadataCache.getFileCache(file);
+          const propertyValue = cache?.frontmatter?.[this.plugin.settings.propertyKey];
+          const tabHeaderEl = (leaf as any).tabHeaderEl as HTMLElement | undefined;
+          
+          /*
+           * Possible alternatives (from deepseek-r1)
+           *
+           * Method 2: Find via Obsidian official API
+           * 1. const tabHeaderEl = this.app.workspace.getActiveTabHeader(view.leaf);
+           *
+           * Method 3: Deep DOM traversal (better compatibility)
+           * 2. const tabHeaderEl = this.findTabHeaderByView(view);
+           */
+          if (tabHeaderEl) {
+            const titleEl = tabHeaderEl.querySelector('.workspace-tab-header-inner-title');
+            if (titleEl) {
+              // Always ensure we have a non-empty title
+              const titleText = (propertyValue && String(propertyValue).trim()) || file.basename || '';
+              if (titleText) {
+                titleEl.setText(titleText);
+              }
+            }
 
-          // Set accessibility attributes
-          tabHeaderEl.setAttribute('aria-label', propertyValue || file.basename);
-          tabHeaderEl.setAttribute('title', propertyValue || file.basename);
-          // Mark as processed to show the title (prevents flicker)
-          tabHeaderEl.setAttribute('data-pov-processed', 'true');
+            // Set accessibility attributes - always ensure non-empty
+            const titleText = (propertyValue && String(propertyValue).trim()) || file.basename || '';
+            if (titleText) {
+              tabHeaderEl.setAttribute('aria-label', titleText);
+              tabHeaderEl.setAttribute('title', titleText);
+            }
+            // Mark as processed to show the title (prevents flicker)
+            tabHeaderEl.setAttribute('data-pov-processed', 'true');
+          }
         }
-      }
     });
   }
 
@@ -161,6 +181,9 @@ export class TabService {
               }
               
               if (tabHeader) {
+                // Always mark as processed first to ensure visibility
+                // (especially important for tabs from other plugins)
+                tabHeader.setAttribute('data-pov-processed', 'true');
                 // Override setText for this tab's title element
                 this.overrideTitleElement(tabHeader);
                 // Mark tab as processed (and rename if enabled)
@@ -175,6 +198,9 @@ export class TabService {
           if (titleEl) {
             const tabHeader = titleEl.closest('.workspace-tab-header') as HTMLElement | null;
             if (tabHeader) {
+              // Always mark as processed first to ensure visibility
+              // (especially important for tabs from other plugins)
+              tabHeader.setAttribute('data-pov-processed', 'true');
               // Override setText for this tab's title element
               this.overrideTitleElement(tabHeader);
               // Mark tab as processed (and rename if enabled)
@@ -224,16 +250,22 @@ export class TabService {
         tabHeader.setAttribute('data-pov-processed', 'true');
         
         // Check if we should replace it (only if feature is enabled)
-        const shouldReplace = this.shouldReplaceTitle(tabHeader, text);
+        const shouldReplace = this.shouldReplaceTitle(tabHeader, text || '');
         
-        if (shouldReplace.newText) {
-          // Replace with property value immediately
-          originalSetText.call(titleEl, shouldReplace.newText);
-          tabHeader.setAttribute('aria-label', shouldReplace.newText);
-          tabHeader.setAttribute('title', shouldReplace.newText);
+        // Always ensure we have a non-empty text to set
+        const textToSet = shouldReplace.newText || text || '';
+        
+        if (textToSet.trim()) {
+          // Replace with property value or fallback
+          originalSetText.call(titleEl, textToSet.trim());
+          tabHeader.setAttribute('aria-label', textToSet.trim());
+          tabHeader.setAttribute('title', textToSet.trim());
         } else {
-          // Call original to maintain Obsidian's behavior
-          originalSetText.call(titleEl, text);
+          // If we still don't have text, call original to maintain Obsidian's behavior
+          // but only if the original text is not empty
+          if (text && text.trim()) {
+            originalSetText.call(titleEl, text.trim());
+          }
         }
       };
       
@@ -260,16 +292,30 @@ export class TabService {
           const cache = this.plugin.app.metadataCache.getFileCache(file);
           const propertyValue = cache?.frontmatter?.[this.plugin.settings.propertyKey];
           
-          // If we have a property value, use it; otherwise use the provided text (which might be basename)
-          if (propertyValue) {
-            return { newText: propertyValue };
+          // If we have a property value, use it; otherwise use basename
+          // Always ensure we have a non-empty fallback
+          if (propertyValue && String(propertyValue).trim()) {
+            return { newText: String(propertyValue).trim() };
           } else {
             // No property, use basename (which is what Obsidian would use)
-            return { newText: file.basename };
+            // Ensure basename is not empty
+            const basename = file.basename || text || '';
+            return { newText: basename || null };
           }
+        }
+        // If view exists but file doesn't yet, use the provided text as fallback
+        // but only if it's not empty
+        if (text && text.trim()) {
+          return { newText: text.trim() };
         }
         break;
       }
+    }
+    
+    // If we can't find the leaf/file, use the provided text if it's not empty
+    // Otherwise return null to use Obsidian's default behavior
+    if (text && text.trim()) {
+      return { newText: text.trim() };
     }
     
     return { newText: null };
@@ -299,14 +345,18 @@ export class TabService {
           
           const titleEl = tabHeaderEl.querySelector('.workspace-tab-header-inner-title');
           if (titleEl) {
-            const currentText = titleEl.textContent || '';
-            const newText = propertyValue || file.basename;
+            // Always ensure we have a non-empty title
+            const newText = (propertyValue && String(propertyValue).trim()) || file.basename || '';
             
-            // Only update if different to avoid unnecessary DOM changes
-            if (currentText !== newText) {
-              titleEl.setText(newText);
-              tabHeaderEl.setAttribute('aria-label', newText);
-              tabHeaderEl.setAttribute('title', newText);
+            if (newText) {
+              const currentText = titleEl.textContent || '';
+              
+              // Only update if different to avoid unnecessary DOM changes
+              if (currentText !== newText) {
+                titleEl.setText(newText);
+                tabHeaderEl.setAttribute('aria-label', newText);
+                tabHeaderEl.setAttribute('title', newText);
+              }
             }
             // Mark as processed to show the title (prevents flicker)
             tabHeaderEl.setAttribute('data-pov-processed', 'true');
