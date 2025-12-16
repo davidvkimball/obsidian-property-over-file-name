@@ -142,14 +142,15 @@
   }
 }
 
-/* Hide tab titles until they're renamed by the plugin to prevent flicker */
-.workspace-tab-header:not([data-pov-processed="true"]) .workspace-tab-header-inner-title {
-  opacity: 0;
-  transition: opacity 0.1s ease;
+/* Hide tab titles until they're processed to prevent filename flash */
+.workspace-tab-header .workspace-tab-header-inner-title {
+  transition: opacity 0.05s ease;
 }
 
-.workspace-tab-header[data-pov-processed="true"] .workspace-tab-header-inner-title {
-  opacity: 1;
+/* Only show title if it's been set by our plugin (check if it matches property or basename) */
+/* This is a workaround - we'll use a data attribute to mark processed tabs */
+.workspace-tab-header:not([data-pov-title-set]) .workspace-tab-header-inner-title {
+  opacity: 0.3;
 }
 
 /* Hide backlink elements until they're processed by the plugin to prevent flicker */

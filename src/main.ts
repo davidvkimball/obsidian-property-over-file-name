@@ -39,8 +39,7 @@ export default class PropertyOverFileNamePlugin extends Plugin {
     this.windowFrameService = new WindowFrameService(this);
     
     // Register tab service events and rename tabs immediately
-    this.tabService.registerEvents();
-    await this.tabService.renameTabs();
+    await this.tabService.registerEvents();
     
     // Register explorer and window frame services
     this.explorerService.registerEvents();
