@@ -26,10 +26,6 @@ export class TabService {
    * EXACT copy of the working implementation from obsidian-title-only-tab
    */
   async renameTabs() {
-    if (!this.plugin.settings.enableForTabs) {
-      return;
-    }
-    
     const leaves = this.plugin.app.workspace.getLeavesOfType('markdown');
     leaves.forEach((leaf) => {
       /*
@@ -52,13 +48,19 @@ export class TabService {
         const tabHeaderEl = (leaf as any).tabHeaderEl as HTMLElement | undefined;
 
         if (tabHeaderEl) {
-          const titleEl = tabHeaderEl.querySelector('.workspace-tab-header-inner-title');
-          if (titleEl) {
-            titleEl.setText(propertyValue || file.basename);
-          }
+          // Always mark tabs as processed so they're not dimmed (even when feature is disabled)
+          tabHeaderEl.setAttribute('data-pov-title-set', 'true');
+          
+          // Only change the title if the feature is enabled
+          if (this.plugin.settings.enableForTabs) {
+            const titleEl = tabHeaderEl.querySelector('.workspace-tab-header-inner-title');
+            if (titleEl) {
+              titleEl.setText(propertyValue || file.basename);
+            }
 
-          tabHeaderEl.setAttribute('aria-label', propertyValue || file.basename);
-          tabHeaderEl.setAttribute('title', propertyValue || file.basename);
+            tabHeaderEl.setAttribute('aria-label', propertyValue || file.basename);
+            tabHeaderEl.setAttribute('title', propertyValue || file.basename);
+          }
         }
       }
     });
