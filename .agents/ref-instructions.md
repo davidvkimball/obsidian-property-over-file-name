@@ -463,4 +463,87 @@ C:\Users\david\Development\
 **General**:
 - The `.ref` folder should be added to `.gitignore` (see project `.gitignore`)
 
+## .agents Folder (Symlink Architecture)
+
+Similar to the `.ref` folder, the `.agents/` folder uses a **symlink architecture** to provide access to shared, general-purpose guidance files. This allows:
+
+- **Single source of truth**: General `.agents` files are maintained in one central location (`../.ref/obsidian-dev/.agents/`)
+- **Automatic updates**: Changes to central `.agents` files propagate to all projects automatically
+- **Project-specific content**: Each project's `AGENTS.md` file remains project-specific and is not symlinked
+- **No manual copying**: No need to manually copy `.agents` files to each project
+
+### Architecture Overview
+
+```
+Central Location: ../.ref/obsidian-dev/.agents/
+├── All general-purpose .agents files
+└── (symlinked from central repository for active development)
+
+Plugin Project
+├── AGENTS.md (project-specific, replaces project-context.md)
+└── .agents/ → symlink to ../.ref/obsidian-dev/.agents/
+```
+
+### First Time Setup
+
+**For the central repository** (where `.agents` files are maintained):
+1. Run the setup script: `.\scripts\setup-agents-link.ps1` (Windows) or `./scripts/setup-agents-link.sh` (Unix)
+2. This creates a symlink from `../.ref/obsidian-dev/.agents/` → your repo's `.agents/` directory
+3. This allows you to edit `.agents` files in your dev repo and have them available centrally
+
+**For plugin projects** (using the shared `.agents` files):
+1. Run the setup script: `.\scripts\setup-agents-link.ps1` (Windows) or `./scripts/setup-agents-link.sh` (Unix)
+2. The script detects you're in a plugin project (not the central repo)
+3. It creates a symlink from `.agents/` → `../.ref/obsidian-dev/.agents/`
+4. If `.agents/` already exists as a directory, it backs it up to `.agents.backup/`
+
+### Setup Scripts
+
+The setup scripts automatically:
+- Detect if you're in the central repo (has actual `.agents/` directory) vs a plugin project
+- Create appropriate symlinks based on context
+- Handle Windows vs Unix symlink creation
+- Backup existing `.agents/` directories if needed
+
+**Windows**: `scripts\setup-agents-link.bat` or `.\scripts\setup-agents-link.ps1`  
+**macOS/Linux**: `./scripts/setup-agents-link.sh`
+
+### How It Works
+
+1. **Central repository**: Contains the actual `.agents/` directory with all general-purpose files
+   - When you edit files here, they're immediately available via the symlink
+   - The symlink from `../.ref/obsidian-dev/.agents/` → your repo ensures changes propagate
+
+2. **Plugin projects**: Have `.agents/` as a symlink to the central location
+   - All general-purpose guidance files are accessed via the symlink
+   - Project-specific content is in `AGENTS.md` (not symlinked)
+   - Updates to central `.agents` files are immediately visible
+
+3. **Project-specific overrides**: Use `.agents/.context/` directory (optional, advanced)
+   - Only create files that differ from general guidance
+   - Structure mirrors `.agents/` directory (e.g., `.context/build-workflow.md`)
+
+### Benefits
+
+- ✅ **Single source of truth**: General `.agents` files maintained in one location
+- ✅ **Automatic propagation**: Changes to central files appear in all projects immediately
+- ✅ **Project-specific content**: Each project's `AGENTS.md` stays project-specific
+- ✅ **No manual copying**: No need to copy `.agents` files to each project
+- ✅ **Consistent with `.ref` pattern**: Uses the same symlink architecture
+
+### Troubleshooting
+
+**If `.agents/` is missing or not a symlink**:
+- Run the setup script: `scripts\setup-agents-link.bat` (Windows), `.\scripts\setup-agents-link.ps1` (PowerShell), or `./scripts/setup-agents-link.sh` (macOS/Linux)
+- The script will create the symlink to `../.ref/obsidian-dev/.agents/`
+
+**If symlink is broken**:
+- Re-run the setup script - it will recreate the symlink
+
+**If central location doesn't exist**:
+- Run the setup script from the central repository first to create the central location
+- Then run it from plugin projects to create the symlinks
+
+**Note**: The `.agents/` folder may be hidden by default in some file explorers, but it exists in the project root. Use tools like `list_dir`, `glob_file_search`, or `read_file` to access `.agents` contents.
+
 

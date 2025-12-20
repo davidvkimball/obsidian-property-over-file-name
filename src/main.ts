@@ -59,7 +59,7 @@ export default class PropertyOverFileNamePlugin extends Plugin {
     this.app.workspace.onLayoutReady(() => {
       this.graphViewService.onLayoutChange();
       this.backlinkService.onLayoutChange();
-      this.tabService.renameTabs();
+      void this.tabService.renameTabs();
       this.updateExplorer();
       this.updateWindowFrame();
     });
@@ -234,7 +234,8 @@ export default class PropertyOverFileNamePlugin extends Plugin {
   }
 
   async loadSettings() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    const loadedData = (await this.loadData()) as PluginSettings | null;
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, loadedData ?? {});
   }
 
   async saveSettings(prevQuickSwitcherState?: boolean, prevTabState?: boolean) {
@@ -246,7 +247,7 @@ export default class PropertyOverFileNamePlugin extends Plugin {
     if (prevTabState !== undefined && prevTabState !== this.settings.enableForTabs) {
       // Always re-register events to ensure tabs are marked as processed
       // (even when disabled, we need to mark tabs so they're visible)
-      this.tabService.registerEvents();
+      void this.tabService.registerEvents();
       this.updateTabs();
     }
   }

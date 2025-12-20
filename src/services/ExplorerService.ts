@@ -52,9 +52,9 @@ export class ExplorerService {
 
     if (folderNoteFile instanceof TFile) {
       const cache = this.plugin.app.metadataCache.getFileCache(folderNoteFile);
-      const propertyValue = cache?.frontmatter?.[this.plugin.settings.propertyKey];
+      const propertyValue = cache?.frontmatter?.[this.plugin.settings.propertyKey] as string | undefined;
       if (propertyValue) {
-        return propertyValue;
+        return String(propertyValue);
       }
     }
 
@@ -69,8 +69,8 @@ export class ExplorerService {
     if (item.file instanceof TFile) {
       // For files, use property-based title
       const cache = this.plugin.app.metadataCache.getFileCache(item.file);
-      const propertyValue = cache?.frontmatter?.[this.plugin.settings.propertyKey];
-      return propertyValue || null;
+      const propertyValue = cache?.frontmatter?.[this.plugin.settings.propertyKey] as string | undefined;
+      return propertyValue ? String(propertyValue) : null;
     } else if (item.file instanceof TFolder) {
       // For folders, check for folder note
       return this.getFolderNoteTitle(item.file);
@@ -188,16 +188,16 @@ export class ExplorerService {
  */
 class ExplorerFileItemMutator {
   private originalUpdateTitle: () => void;
-  private originalStartRename: () => void;
+  private originalStartRename: (() => void) | undefined;
 
   constructor(
     private readonly item: TFileExplorerItem,
     private readonly service: ExplorerService
   ) {
     // Store original methods
-    const proto = Object.getPrototypeOf(item);
+    const proto = Object.getPrototypeOf(item) as { updateTitle: () => void; startRename?: () => void };
     this.originalUpdateTitle = proto.updateTitle.bind(item);
-    this.originalStartRename = proto.startRename?.bind(item);
+    this.originalStartRename = proto.startRename ? proto.startRename.bind(item) : undefined;
 
     // Override updateTitle
     item.updateTitle = this.updateTitle.bind(this);
@@ -229,9 +229,9 @@ class ExplorerFileItemMutator {
 
   destroy() {
     // Restore original methods
-    const proto = Object.getPrototypeOf(this.item);
+    const proto = Object.getPrototypeOf(this.item) as { startRename?: () => void };
     this.item.updateTitle = this.originalUpdateTitle;
-    if (proto.startRename) {
+    if (proto.startRename && this.originalStartRename) {
       this.item.startRename = this.originalStartRename;
     }
   }

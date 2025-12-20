@@ -91,8 +91,9 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
     }
 
     if (frontmatter?.aliases) {
-      aliases = Array.isArray(frontmatter.aliases) ? frontmatter.aliases : [frontmatter.aliases];
-      aliases = aliases.map(alias => String(alias).trim()).filter(alias => alias !== '');
+      const aliasesRaw = frontmatter.aliases as unknown;
+      aliases = Array.isArray(aliasesRaw) ? aliasesRaw.map(a => String(a)) : [String(aliasesRaw)];
+      aliases = aliases.map(alias => alias.trim()).filter(alias => alias !== '');
     }
 
     this.fileCache.set(file.path, {
@@ -235,9 +236,9 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
   getDisplayName(file: TFile): string {
     const cache = this.app.metadataCache.getFileCache(file);
     const frontmatter = cache?.frontmatter;
-    const propertyValue = frontmatter?.[this.plugin.settings.propertyKey];
+    const propertyValue = frontmatter?.[this.plugin.settings.propertyKey] as unknown;
     if (propertyValue !== undefined && propertyValue !== null) {
-      const trimmed = String(propertyValue).trim();
+      const trimmed = typeof propertyValue === 'string' ? propertyValue.trim() : (typeof propertyValue === 'number' || typeof propertyValue === 'boolean' ? String(propertyValue) : '').trim();
       if (trimmed !== '') {
         return trimmed;
       }
@@ -769,21 +770,25 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
   private isUsingCustomProperty(file: TFile): boolean {
     const cache = this.app.metadataCache.getFileCache(file);
     const frontmatter = cache?.frontmatter;
-    const propertyValue = frontmatter?.[this.plugin.settings.propertyKey];
-    return propertyValue !== undefined && propertyValue !== null && String(propertyValue).trim() !== '';
+    const propertyValue = frontmatter?.[this.plugin.settings.propertyKey] as unknown;
+    if (propertyValue === undefined || propertyValue === null) {
+      return false;
+    }
+    const strValue = typeof propertyValue === 'string' ? propertyValue : (typeof propertyValue === 'number' || typeof propertyValue === 'boolean' ? String(propertyValue) : '');
+    return strValue.trim() !== '';
   }
 
   private isUsingAlias(file: TFile): boolean {
     // Check if this file has aliases and if we're currently searching
     const cache = this.app.metadataCache.getFileCache(file);
     const frontmatter = cache?.frontmatter;
-    const aliases = frontmatter?.aliases;
+    const aliases = frontmatter?.aliases as unknown;
     
     if (!aliases) return false;
     
     // For now, show alias icon if the file has aliases and we're not using a custom property
     const isUsingCustomProperty = this.isUsingCustomProperty(file);
-    return !isUsingCustomProperty && aliases;
+    return !isUsingCustomProperty && Boolean(aliases);
   }
 
   onChooseItem(item: QuickSwitchItem['item'], evt: MouseEvent | KeyboardEvent): void {
@@ -794,8 +799,9 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
       const sourcePath = activeView?.file?.path || '';
       
       // Use openLinkText which respects Obsidian's default new note location settings
-      void this.app.workspace.openLinkText(unresolvedText, sourcePath).catch((err) => {
-        new Notice(`Error creating note: ${err.message}`);
+      void this.app.workspace.openLinkText(unresolvedText, sourcePath).catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : String(err);
+        new Notice(`Error creating note: ${message}`);
       });
       return;
     }
@@ -805,8 +811,9 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
       const sourcePath = activeView?.file?.path || '';
       
       // Use openLinkText which respects Obsidian's default new note location settings
-      void this.app.workspace.openLinkText(item.newName, sourcePath).catch((err) => {
-        new Notice(`Error creating note: ${err.message}`);
+      void this.app.workspace.openLinkText(item.newName, sourcePath).catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : String(err);
+        new Notice(`Error creating note: ${message}`);
       });
     } else if (item instanceof TFile) {
       // Handle different modifier keys like default Obsidian

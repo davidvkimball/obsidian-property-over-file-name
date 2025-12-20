@@ -38,14 +38,14 @@ export class TabService {
       const view = leaf.view as MarkdownView;
       const state = leaf.getViewState();
       if (state.state?.file && !view?.file) {
-        leaf.setViewState({ type: state.type, state: state.state });
+        void leaf.setViewState({ type: state.type, state: state.state });
       }
 
       if (view?.file) {
         const file = view.file;
         const cache = this.plugin.app.metadataCache.getFileCache(file);
-        const propertyValue = cache?.frontmatter?.[this.plugin.settings.propertyKey];
-        const tabHeaderEl = (leaf as any).tabHeaderEl as HTMLElement | undefined;
+        const propertyValue = cache?.frontmatter?.[this.plugin.settings.propertyKey] as string | undefined;
+        const tabHeaderEl = (leaf as { tabHeaderEl?: HTMLElement }).tabHeaderEl;
 
         if (tabHeaderEl) {
           // Always mark tabs as processed so they're not dimmed (even when feature is disabled)
@@ -54,12 +54,13 @@ export class TabService {
           // Only change the title if the feature is enabled
           if (this.plugin.settings.enableForTabs) {
             const titleEl = tabHeaderEl.querySelector('.workspace-tab-header-inner-title');
+            const displayText = propertyValue ? String(propertyValue) : file.basename;
             if (titleEl) {
-              titleEl.setText(propertyValue || file.basename);
+              titleEl.setText(displayText);
             }
 
-            tabHeaderEl.setAttribute('aria-label', propertyValue || file.basename);
-            tabHeaderEl.setAttribute('title', propertyValue || file.basename);
+            tabHeaderEl.setAttribute('aria-label', displayText);
+            tabHeaderEl.setAttribute('title', displayText);
           }
         }
       }
@@ -98,7 +99,7 @@ export class TabService {
    * Update tabs (public method for manual updates)
    */
   updateTabs() {
-    this.renameTabs();
+    void this.renameTabs();
   }
 
   /**

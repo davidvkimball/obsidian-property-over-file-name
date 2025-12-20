@@ -40,11 +40,22 @@ interface GraphNode {
   };
   getDisplayText(): string;
   pov_originalGetDisplayText?: () => string;
+  pov_plugin?: PropertyOverFileNamePlugin;
+}
+
+interface GraphNodePrototype {
+  getDisplayText(): string;
+  pov_originalGetDisplayText?: () => string;
+  pov_plugin?: PropertyOverFileNamePlugin;
+}
+
+interface GraphNodeCollectionWithFirst extends GraphNodeCollection {
+  first(): GraphNode | undefined;
 }
 
 export class GraphViewService {
   private plugin: PropertyOverFileNamePlugin;
-  private modifiedPrototypes: GraphNode[] = [];
+  private modifiedPrototypes: GraphNodePrototype[] = [];
 
   constructor(plugin: PropertyOverFileNamePlugin) {
     this.plugin = plugin;
@@ -52,7 +63,7 @@ export class GraphViewService {
 
   private createGetDisplayText(app: App) {
     return function getDisplayText(this: GraphNode): string {
-      const plugin = (this as any).pov_plugin as PropertyOverFileNamePlugin;
+      const plugin = this.pov_plugin;
       if (!plugin || !plugin.settings.enableForGraphView) {
         // If disabled or plugin not found, use original
         if (this.pov_originalGetDisplayText) {
@@ -105,10 +116,11 @@ export class GraphViewService {
   private overridePrototype(view: GraphView | LocalGraphView) {
     // Try to get first node - handle both Set and custom collection types
     let firstNode: GraphNode | undefined;
-    if (typeof (view.renderer.nodes as any).first === 'function') {
-      firstNode = (view.renderer.nodes as any).first();
+    const nodesWithFirst = view.renderer.nodes as GraphNodeCollectionWithFirst;
+    if (typeof nodesWithFirst.first === 'function') {
+      firstNode = nodesWithFirst.first();
     } else if (view.renderer.nodes instanceof Set) {
-      firstNode = view.renderer.nodes.values().next().value;
+      firstNode = (view.renderer.nodes.values().next().value as GraphNode | undefined);
     } else {
       // Fallback: iterate to get first
       for (const node of view.renderer.nodes) {
@@ -118,12 +130,14 @@ export class GraphViewService {
     }
 
     if (firstNode) {
-      const proto = firstNode.constructor.prototype;
+      const proto = firstNode.constructor.prototype as GraphNodePrototype;
       if (!proto.hasOwnProperty('pov_originalGetDisplayText') && !this.modifiedPrototypes.includes(proto)) {
+        // eslint-disable-next-line @typescript-eslint/unbound-method -- Function is designed to be called with `this` as GraphNode
         proto.pov_originalGetDisplayText = proto.getDisplayText;
-        proto.getDisplayText = this.createGetDisplayText(this.plugin.app);
+        const getDisplayTextFn = this.createGetDisplayText(this.plugin.app);
+        proto.getDisplayText = getDisplayTextFn;
         // Store plugin reference on prototype for access in getDisplayText
-        (proto as any).pov_plugin = this.plugin;
+        proto.pov_plugin = this.plugin;
         
         // Update all existing nodes
         for (const node of view.renderer.nodes) {
@@ -143,7 +157,7 @@ export class GraphViewService {
         proto.getDisplayText = proto.pov_originalGetDisplayText;
         delete proto.pov_originalGetDisplayText;
       }
-      delete (proto as any).pov_plugin;
+      delete proto.pov_plugin;
     }
     this.modifiedPrototypes = [];
     this.rewriteNames();
@@ -170,7 +184,7 @@ export class GraphViewService {
     }
     
     // Check if graph plugin is loaded
-    const appInternal = this.plugin.app as any;
+    const appInternal = this.plugin.app as App & { internalPlugins?: { getPluginById?: (id: string) => { _loaded?: boolean } | null } };
     const graphPlugin = appInternal.internalPlugins?.getPluginById?.('graph');
     if (!graphPlugin?._loaded) return;
     

@@ -33,7 +33,7 @@ export class DragDropService {
     // Prevent duplicate processing if both handlers fire for the same drop
     const now = Date.now();
     if (now - this.lastDropTime < this.DROP_DEBOUNCE_MS && this.lastDropData === filePath) {
-      console.log('[PropertyOverFileName] handleDragDrop: Ignoring duplicate drop event');
+      console.debug('[PropertyOverFileName] handleDragDrop: Ignoring duplicate drop event');
       return;
     }
     this.lastDropTime = now;
@@ -123,7 +123,7 @@ export class DragDropService {
     // Prevent duplicate processing if both handlers fire for the same drop
     const now = Date.now();
     if (now - this.lastDropTime < this.DROP_DEBOUNCE_MS && this.lastDropData === actualFilePath) {
-      console.log('[PropertyOverFileName] handleDOMDrop: Ignoring duplicate drop event');
+      console.debug('[PropertyOverFileName] handleDOMDrop: Ignoring duplicate drop event');
       return;
     }
     this.lastDropTime = now;

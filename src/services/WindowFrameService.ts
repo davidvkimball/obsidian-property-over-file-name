@@ -24,9 +24,9 @@ export class WindowFrameService {
     const activeFile = this.plugin.app.workspace.getActiveFile();
     if (activeFile instanceof TFile) {
       const cache = this.plugin.app.metadataCache.getFileCache(activeFile);
-      const propertyValue = cache?.frontmatter?.[this.plugin.settings.propertyKey];
+      const propertyValue = cache?.frontmatter?.[this.plugin.settings.propertyKey] as string | undefined;
       if (propertyValue) {
-        return propertyValue;
+        return String(propertyValue);
       }
       return activeFile.basename;
     }
@@ -48,7 +48,7 @@ export class WindowFrameService {
     if (title) {
       // Get the app title format (usually "Title - Vault Name")
       // Try to use Obsidian's getAppTitle method if available
-      const app = this.plugin.app as any;
+      const app = this.plugin.app as { getAppTitle?: (title: string) => string };
       if (typeof app.getAppTitle === 'function') {
         document.title = app.getAppTitle(title);
       } else {

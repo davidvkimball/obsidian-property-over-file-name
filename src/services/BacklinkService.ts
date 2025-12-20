@@ -1,4 +1,4 @@
-import { App, MarkdownView, TFile, WorkspaceLeaf } from 'obsidian';
+import { MarkdownView, TFile } from 'obsidian';
 import { PropertyOverFileNamePlugin } from '../types';
 
 /**
@@ -54,7 +54,7 @@ export class BacklinkService {
     this.updateEmbeddedBacklinks();
     
     // Update dedicated backlinks panel
-    this.updateDedicatedBacklinksPanel();
+    void this.updateDedicatedBacklinksPanel();
 
     // Start observing for future changes
     this.startObserving();
@@ -86,7 +86,7 @@ export class BacklinkService {
       await leaf.loadIfDeferred();
       
       if (leaf.view) {
-        const container = (leaf.view as any).containerEl;
+        const container = (leaf.view as { containerEl?: HTMLElement }).containerEl;
         if (container) {
           // Find backlinks and outgoing links sections
           const backlinksContainer = container.querySelector('.backlinks-pane') || container.querySelector('.backlink-pane');
@@ -120,7 +120,7 @@ export class BacklinkService {
     // Try to find a link element (parent or child)
     const link = element.closest('a') || element.querySelector('a');
     if (link) {
-      const href = (link as HTMLAnchorElement).href || link.getAttribute('href');
+      const href = link instanceof HTMLAnchorElement ? link.href : (link as Element).getAttribute('href');
       if (href) {
         // Try obsidian:// URL format
         if (href.startsWith('obsidian://')) {
@@ -134,7 +134,7 @@ export class BacklinkService {
                 return file;
               }
             }
-          } catch (e) {
+          } catch {
             // Ignore URL parsing errors
           }
         }
@@ -199,7 +199,7 @@ export class BacklinkService {
         container.querySelectorAll(selector).forEach(el => {
           fileElements.add(el as HTMLElement);
         });
-      } catch (e) {
+      } catch {
         // Ignore invalid selector errors
       }
     });
@@ -321,7 +321,7 @@ export class BacklinkService {
                         newElements.push(el);
                       }
                     });
-                  } catch (e) {
+                  } catch {
                     // Ignore
                   }
                 });
@@ -329,7 +329,7 @@ export class BacklinkService {
             }
           }
         } else if (mutation.type === 'characterData') {
-          const target = mutation.target as Node;
+          const target = mutation.target;
           
           // Check if mutation is in a backlink container
           if (target instanceof HTMLElement) {
@@ -426,7 +426,7 @@ export class BacklinkService {
               this.overrideElementTextContent(el);
             }
           });
-        } catch (e) {
+        } catch {
           // Ignore invalid selector errors
         }
       });
@@ -442,7 +442,7 @@ export class BacklinkService {
     }
 
     // Store original textContent descriptor if it exists
-    const proto = Object.getPrototypeOf(element);
+    const proto = Object.getPrototypeOf(element) as { textContent?: PropertyDescriptor };
     const originalDescriptor = Object.getOwnPropertyDescriptor(proto, 'textContent');
     
     if (originalDescriptor && originalDescriptor.set) {
@@ -471,14 +471,15 @@ export class BacklinkService {
             // Mark as processed
             element.setAttribute('data-pov-processed', 'true');
           },
-          get: originalDescriptor.get || (function(this: HTMLElement) { 
+          // eslint-disable-next-line @typescript-eslint/unbound-method
+          get: originalDescriptor.get || (() => {
             // Fallback: access the native textContent property directly
-            return Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'textContent')?.get?.call(this) || '';
+            return Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'textContent')?.get?.call(element) as string || '';
           }),
           configurable: true,
           enumerable: true
         });
-      } catch (e) {
+      } catch {
         // If override fails (e.g., property is not configurable), fall back to monitoring
         element.setAttribute('data-pov-processed', 'true');
       }
@@ -536,7 +537,7 @@ export class BacklinkService {
     this.originalTextContentDescriptors.forEach((descriptor, element) => {
       try {
         Object.defineProperty(element, 'textContent', descriptor);
-      } catch (e) {
+      } catch {
         // Ignore errors when restoring
       }
     });

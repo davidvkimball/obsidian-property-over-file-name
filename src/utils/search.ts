@@ -65,8 +65,9 @@ export function buildFileCache(
     }
 
     if (frontmatter?.aliases) {
-      aliases = Array.isArray(frontmatter.aliases) ? frontmatter.aliases : [frontmatter.aliases];
-      aliases = aliases.map(alias => String(alias).trim()).filter(alias => alias !== '');
+      const aliasesRaw = frontmatter.aliases as unknown;
+      aliases = Array.isArray(aliasesRaw) ? aliasesRaw.map(a => String(a)) : [String(aliasesRaw)];
+      aliases = aliases.map(alias => alias.trim()).filter(alias => alias !== '');
     }
 
     cache.set(file.path, {

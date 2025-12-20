@@ -21,7 +21,7 @@ export class SettingTab extends PluginSettingTab {
       .setDesc('The property to use as the display title. Falls back to the file name when no property is set for that item.')
       .addText((text) =>
         text
-          .setPlaceholder('title')
+          .setPlaceholder('Title')
           .setValue(this.plugin.settings.propertyKey)
           .onChange(async (value) => {
             this.plugin.settings.propertyKey = value.trim() || 'title';
@@ -167,10 +167,10 @@ export class SettingTab extends PluginSettingTab {
     if (this.plugin.settings.enableForExplorer) {
       new Setting(containerEl)
         .setName('Folder note file name')
-        .setDesc('If a folder contains a file with this name that has a title property, the folder will display that title instead. This ensures compatibility with the Folder Notes plugin. Leave blank to disable.')
+        .setDesc('If a folder contains a file with this name that has the configured property, the folder will display that property value instead. This ensures compatibility with folder notes plugins. Leave blank to disable.')
         .addText((text) =>
           text
-            .setPlaceholder('index')
+            .setPlaceholder('Index')
             .setValue(this.plugin.settings.folderNoteFilename)
             .onChange(async (value) => {
               this.plugin.settings.folderNoteFilename = value.trim();

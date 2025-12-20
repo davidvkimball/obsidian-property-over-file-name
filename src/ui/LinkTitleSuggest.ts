@@ -85,8 +85,9 @@ export class LinkTitleSuggest extends EditorSuggest<SuggestionItem> {
     }
 
     if (frontmatter?.aliases) {
-      aliases = Array.isArray(frontmatter.aliases) ? frontmatter.aliases : [frontmatter.aliases];
-      aliases = aliases.map(alias => String(alias).trim()).filter(alias => alias !== '');
+      const aliasesRaw = frontmatter.aliases as unknown;
+      aliases = Array.isArray(aliasesRaw) ? aliasesRaw.map(a => String(a)) : [String(aliasesRaw)];
+      aliases = aliases.map(alias => alias.trim()).filter(alias => alias !== '');
     }
 
     this.fileCache.set(file.path, {
@@ -458,21 +459,25 @@ export class LinkTitleSuggest extends EditorSuggest<SuggestionItem> {
   private isUsingCustomProperty(file: TFile): boolean {
     const cache = this.app.metadataCache.getFileCache(file);
     const frontmatter = cache?.frontmatter;
-    const propertyValue = frontmatter?.[this.plugin.settings.propertyKey];
-    return propertyValue !== undefined && propertyValue !== null && String(propertyValue).trim() !== '';
+    const propertyValue = frontmatter?.[this.plugin.settings.propertyKey] as unknown;
+    if (propertyValue === undefined || propertyValue === null) {
+      return false;
+    }
+    const strValue = typeof propertyValue === 'string' ? propertyValue : (typeof propertyValue === 'number' || typeof propertyValue === 'boolean' ? String(propertyValue) : '');
+    return strValue.trim() !== '';
   }
 
   private isUsingAlias(file: TFile): boolean {
     // Check if this file has aliases and if we're currently searching
     const cache = this.app.metadataCache.getFileCache(file);
     const frontmatter = cache?.frontmatter;
-    const aliases = frontmatter?.aliases;
+    const aliases = frontmatter?.aliases as unknown;
     
     if (!aliases) return false;
     
     // For now, show alias icon if the file has aliases and we're not using a custom property
     const isUsingCustomProperty = this.isUsingCustomProperty(file);
-    return !isUsingCustomProperty && aliases;
+    return !isUsingCustomProperty && Boolean(aliases);
   }
 
   selectSuggestion(suggestion: SuggestionItem, evt: MouseEvent | KeyboardEvent): void {
