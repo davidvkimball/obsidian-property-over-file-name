@@ -16,19 +16,126 @@ Applicability: Plugin
 
 ### Project Overview
 
+Property Over File Name is an Obsidian plugin that displays note properties (e.g., `title` from frontmatter) instead of file names across various Obsidian UI components. This is particularly useful for content management systems where notes have human-readable titles that differ from their file names.
+
+The plugin integrates with multiple Obsidian UI components:
+- **Link Suggester**: Shows property-based titles when typing `[[`
+- **Quick Switcher**: Displays property titles in search results
+- **Graph View**: Uses property titles for node labels
+- **Tab Titles**: Shows property titles in tab headers
+- **Backlinks Panel**: Displays property titles in linked mentions
+- **Window Frame**: Shows property title in browser title bar
+- **File Explorer**: Displays property titles for files and folders (with folder note support)
+- **Drag & Drop**: Uses property titles when dragging notes
+
+The plugin is configurable with a default property key of `title`, supports fuzzy and simple search modes, includes file names and aliases in search results, and provides folder note compatibility.
+
+This plugin is part of the [Vault CMS](https://github.com/davidvkimball/vault-cms) project and works particularly well with [Astro Composer](https://github.com/davidvkimball/obsidian-astro-composer).
+
 ### Important Project-Specific Details
+
+- **Type**: Plugin
+- **Purpose**: Display custom frontmatter properties instead of file names across Obsidian UI components
+- **Status**: Beta (installed via BRAT or manually)
+- **Min App Version**: 0.15.0
+- **License**: GPL-3.0
+
+**Key Features**:
+- Property-based display in 8+ UI components (link suggester, quick switcher, graph view, tabs, backlinks, window frame, file explorer, drag & drop)
+- Configurable property key (default: `title`)
+- Supports folder notes with configurable filename pattern
+- Fuzzy search with optional file name and alias inclusion
+- Simple search mode for large vaults (thousands of files)
+- Cache-based property retrieval for performance
+- Event-driven updates to keep UI in sync with metadata changes
+
+**Architecture**:
+- **Service-based design**: Each UI component has its own service class (CacheService, QuickSwitcherService, GraphViewService, BacklinkService, TabService, ExplorerService, WindowFrameService, DragDropService)
+- **Cache system**: Caches property values and display names for performance
+- **Event-driven updates**: Metadata cache changes trigger automatic UI refreshes
+- **Backward compatibility**: Uses SettingGroup with version checking (Obsidian 1.11.0+)
 
 ### Maintenance Tasks
 
+- **Reference materials**: Keep the 6 core Obsidian projects in `.ref` synced (obsidian-api, obsidian-sample-plugin, obsidian-developer-docs, obsidian-plugin-docs, obsidian-sample-theme, eslint-plugin)
+- **UI Tweaker reference**: Update `.ref/plugins/obsidian-ui-tweaker/` if the local project changes (it's a symlink to a local project)
+- **Other references**: Monitor reference plugins in `.ref/plugins/` for updates if needed
+- **Obsidian API changes**: Monitor for API changes, especially related to SettingGroup and UI component APIs
+- **Dependencies**: Keep TypeScript, ESLint, and other devDependencies up to date
+- **Testing**: Test on both desktop and mobile (plugin is not desktop-only)
+
 ### Project-Specific Conventions
+
+- **Service-based architecture**: Each UI component has its own service class in `src/services/`
+- **Cache-based property retrieval**: CacheService manages property caching for performance
+- **Event-driven updates**: Metadata cache changes trigger automatic UI refreshes via event listeners
+- **Settings organization**: Settings are organized by UI component (enableForLinking, enableForQuickSwitcher, etc.)
+- **Type safety**: Extensive TypeScript interfaces for internal Obsidian APIs (WorkspaceInternal, EditorSuggest, etc.)
+- **Conditional settings**: Some settings are conditionally displayed (e.g., folder note filename only when explorer is enabled)
+- **Naming conventions**: Service classes use descriptive names ending in "Service" (e.g., QuickSwitcherService)
+- **File organization**: 
+  - `src/services/` - Service classes for UI components
+  - `src/ui/` - UI components (settings tab, modals, suggesters)
+  - `src/utils/` - Utility functions (search, settings compatibility)
+  - `src/types.ts` - TypeScript type definitions
+  - `src/settings.ts` - Default settings and validation
 
 ### Project-Specific References
 
+- `.ref/plugins/obsidian-ui-tweaker/` - Reference for SettingGroup implementation pattern and settings compatibility utility
+- `.ref/plugins/backlink-settings/` - Backlink implementation reference
+- `.ref/plugins/front-matter-title-reference/` - Front matter title patterns and implementation
+- `.ref/plugins/node-masquerade-reference/` - Graph view node title implementation
+- `.ref/plugins/obsidian-title-only-tab/` - Tab renaming implementation (adapted for this plugin)
+- `.ref/plugins/switch-plus-reference/` - Quick switcher patterns and implementation
+
+**Note**: The 6 core Obsidian projects (obsidian-api, obsidian-sample-plugin, etc.) are always relevant and don't need to be listed here.
+
 ### Overrides (Optional)
+
+None currently. This project follows the general `.agents` guidance.
 
 ### Key Files and Their Purposes
 
+- **`src/main.ts`** - Plugin entry point, service initialization, event registration, and lifecycle management
+- **`src/ui/SettingTab.ts`** - Settings UI implementation using SettingGroup with compatibility utility for backward compatibility
+- **`src/utils/settings-compat.ts`** - Backward-compatible SettingGroup wrapper that uses `requireApiVersion('1.11.0')` to check for SettingGroup support
+- **`src/services/CacheService.ts`** - Manages property caching for performance, invalidates cache on file changes
+- **`src/services/QuickSwitcherService.ts`** - Handles quick switcher integration and property-based search
+- **`src/services/GraphViewService.ts`** - Manages graph view node title updates
+- **`src/services/BacklinkService.ts`** - Handles backlinks panel and linked mentions display
+- **`src/services/TabService.ts`** - Manages tab title updates
+- **`src/services/ExplorerService.ts`** - Handles file explorer display with folder note support
+- **`src/services/WindowFrameService.ts`** - Manages browser window title bar updates
+- **`src/services/DragDropService.ts`** - Handles drag and drop events for property-based titles
+- **`src/ui/LinkTitleSuggest.ts`** - Custom editor suggester for link insertion with property-based titles
+- **`src/ui/QuickSwitchModal.ts`** - Custom quick switcher modal implementation
+- **`src/utils/search.ts`** - Search utilities for fuzzy and simple search modes
+- **`src/settings.ts`** - Default settings configuration and validation
+- **`src/types.ts`** - TypeScript type definitions for plugin settings, cached data, and internal Obsidian APIs
+- **`src/commands/index.ts`** - Command registration
+
 ### Development Notes
+
+- **SettingGroup usage**: The plugin uses SettingGroup (Obsidian 1.11.0+) with a compatibility utility (`src/utils/settings-compat.ts`) that falls back to manual heading creation for older Obsidian versions. This ensures backward compatibility while using modern UI patterns.
+
+- **Service architecture**: Each UI component has its own service class that handles initialization, event registration, and cleanup. This modular approach makes the codebase maintainable and allows services to be enabled/disabled independently.
+
+- **Cache system**: The CacheService caches property values and display names to avoid repeated metadata lookups. The cache is invalidated on file modifications, renames, and deletions, and rebuilt when the metadata cache changes.
+
+- **Event-driven updates**: The plugin registers event listeners for metadata cache changes, file modifications, and workspace layout changes. These events trigger automatic UI refreshes to keep the display in sync with the actual data.
+
+- **Conditional settings**: The folder note filename setting is conditionally displayed only when the file explorer feature is enabled. This is handled by re-rendering the settings tab when the explorer setting changes.
+
+- **Search modes**: The plugin supports both fuzzy search (default) and simple search modes. Simple search provides better performance for very large vaults (thousands of files) but is less flexible than fuzzy search.
+
+- **Type safety**: The plugin uses extensive TypeScript interfaces for internal Obsidian APIs (WorkspaceInternal, EditorSuggest, etc.) to provide type safety when accessing internal APIs.
+
+- **Credits and adaptations**: 
+  - Tab renaming functionality adapted from [Title-only Tab](https://github.com/tristone13th/obsidian-title-only-tab) plugin
+  - Graph view functionality adapted from [Node Masquerade](https://github.com/Kapirklaa/obsidian-node-masquerade) plugin
+  - Backlink, explorer, and window frame services adapted from [Front Matter Title](https://github.com/snezhig/obsidian-front-matter-title) plugin
+  - All adapted code has been modified to use the user-defined property key setting instead of hardcoded "title" property
 
 ---
 

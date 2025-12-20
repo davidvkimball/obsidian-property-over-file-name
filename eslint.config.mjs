@@ -38,14 +38,12 @@ export default defineConfig([
         sleep: "readonly"
       }
     },
-    // Custom rule overrides (migrated from .eslintrc)
+    // Custom rule overrides
     rules: {
       "@typescript-eslint/ban-ts-comment": "off",
       "@typescript-eslint/no-empty-function": "off",
       "no-prototype-builtins": "off",
-      "@typescript-eslint/no-misused-promises": ["error",{"checksVoidReturn":{"attributes":false,"properties":false,"returns":false,"variables":false}}],
-      "no-unused-vars": "off",
-      "@typescript-eslint/no-unused-vars": ["error",{"args":"none"}]
+      "@typescript-eslint/no-misused-promises": ["error",{"checksVoidReturn":{"attributes":false,"properties":false,"returns":false,"variables":false}}]
     },
   },
   {
