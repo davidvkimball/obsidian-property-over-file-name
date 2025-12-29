@@ -1,5 +1,6 @@
-import { TFile, MetadataCache } from 'obsidian';
-import { CachedFileData } from '../types';
+import { TFile, MetadataCache, App } from 'obsidian';
+import { CachedFileData, PluginSettings } from '../types';
+import { isFileTypeSupported } from './frontmatter';
 
 export function fuzzyMatch(str: string, query: string): boolean {
   let i = 0;
@@ -42,23 +43,50 @@ export function getMatchScore(display: string, query: string, basename: string, 
   return Math.max(0, score);
 }
 
-export function buildFileCache(
+export async function buildFileCache(
   files: TFile[], 
-  metadataCache: MetadataCache, 
-  propertyKey: string
-): Map<string, CachedFileData> {
+  metadataCache: MetadataCache,
+  app: App,
+  propertyKey: string,
+  settings: PluginSettings
+): Promise<Map<string, CachedFileData>> {
   const cache = new Map<string, CachedFileData>();
+  const { getFrontmatter } = await import('./frontmatter');
   
-  files.forEach((file) => {
-    const fileCache = metadataCache.getFileCache(file);
-    const frontmatter = fileCache?.frontmatter;
+  // Process files in parallel for better performance
+  await Promise.all(files.map(async (file) => {
+    // Skip unsupported file types
+    if (!isFileTypeSupported(file.extension, settings)) {
+      return;
+    }
+
+    // Use sync version for .md files, async for .mdx files
+    let frontmatter: Record<string, unknown> | null;
+    if (file.extension === 'md') {
+      // For .md files, use metadata cache (fast sync access)
+      const fileCache = app.metadataCache.getFileCache(file);
+      frontmatter = fileCache?.frontmatter || null;
+    } else {
+      // MDX files need async reading
+      frontmatter = await getFrontmatter(app, file, settings);
+    }
+
     let displayName = file.basename;
     let isCustomDisplay = false;
     let aliases: string[] = [];
 
     if (frontmatter && frontmatter[propertyKey] !== undefined && frontmatter[propertyKey] !== null) {
-      const propertyValue = String(frontmatter[propertyKey]).trim();
-      if (propertyValue !== '') {
+      const propertyValueRaw = frontmatter[propertyKey];
+      let propertyValue: string;
+      if (typeof propertyValueRaw === 'string') {
+        propertyValue = propertyValueRaw.trim();
+      } else if (typeof propertyValueRaw === 'number' || typeof propertyValueRaw === 'boolean') {
+        propertyValue = String(propertyValueRaw).trim();
+      } else {
+        // Skip objects/arrays - they can't be used as display names
+        propertyValue = '';
+      }
+      if (propertyValue && propertyValue !== '') {
         displayName = propertyValue;
         isCustomDisplay = true;
       }
@@ -77,7 +105,7 @@ export function buildFileCache(
       lastModified: file.stat.mtime,
       isCustomDisplay
     });
-  });
+  }));
   
   return cache;
 }

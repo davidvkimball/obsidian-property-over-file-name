@@ -15,13 +15,17 @@ export class CacheService {
 
   invalidateCache(file: TFile): void {
     if (this.suggest) {
-      this.suggest.updateFileCache(file);
+      // updateFileCache is now async, but we can't await here
+      // The cache will be updated asynchronously
+      void this.suggest.updateFileCache(file);
     }
   }
 
   rebuildCache(): void {
     if (this.suggest) {
-      this.suggest.buildFileCache();
+      // buildFileCache is now async, but we can't await here
+      // The cache will be rebuilt asynchronously
+      void this.suggest.buildFileCache();
     }
   }
 }

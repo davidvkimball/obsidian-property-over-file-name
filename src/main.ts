@@ -12,6 +12,7 @@ import { BacklinkService } from './services/BacklinkService';
 import { TabService } from './services/TabService';
 import { ExplorerService } from './services/ExplorerService';
 import { WindowFrameService } from './services/WindowFrameService';
+import { frontmatterCache } from './utils/frontmatter-cache';
 
 export default class PropertyOverFileNamePlugin extends Plugin {
   settings!: PluginSettings;
@@ -45,6 +46,19 @@ export default class PropertyOverFileNamePlugin extends Plugin {
     this.explorerService.registerEvents();
     this.windowFrameService.registerEvents();
     
+    // Pre-populate frontmatter cache for MDX files if enabled
+    if (this.settings.enableMdxSupport) {
+      void (async () => {
+        const mdxFiles = this.app.vault.getFiles().filter(
+          (f): f is TFile => f instanceof TFile && f.extension === 'mdx'
+        );
+        // Pre-populate cache in background
+        for (const file of mdxFiles) {
+          void frontmatterCache.get(this.app, file, this.settings);
+        }
+      })();
+    }
+
     // Wait a bit for metadata cache to be fully populated
     setTimeout(() => {
       this.updateLinkSuggester();
@@ -80,24 +94,30 @@ export default class PropertyOverFileNamePlugin extends Plugin {
     // Register file change events to invalidate cache
     this.registerEvent(
       this.app.vault.on('modify', (file) => {
-        if (file instanceof TFile && file.extension === 'md') {
+        if (file instanceof TFile && (file.extension === 'md' || (file.extension === 'mdx' && this.settings.enableMdxSupport))) {
           this.cacheService.invalidateCache(file);
+          // Also invalidate frontmatter cache
+          frontmatterCache.invalidate(file.path);
         }
       })
     );
 
     this.registerEvent(
       this.app.vault.on('rename', (file, oldPath) => {
-        if (file instanceof TFile && file.extension === 'md') {
+        if (file instanceof TFile && (file.extension === 'md' || (file.extension === 'mdx' && this.settings.enableMdxSupport))) {
           this.cacheService.invalidateCache(file);
+          // Also invalidate frontmatter cache
+          frontmatterCache.invalidate(file.path);
         }
       })
     );
 
     this.registerEvent(
       this.app.vault.on('delete', (file) => {
-        if (file instanceof TFile && file.extension === 'md') {
+        if (file instanceof TFile && (file.extension === 'md' || (file.extension === 'mdx' && this.settings.enableMdxSupport))) {
           this.cacheService.invalidateCache(file);
+          // Also invalidate frontmatter cache
+          frontmatterCache.invalidate(file.path);
         }
       })
     );
@@ -105,7 +125,7 @@ export default class PropertyOverFileNamePlugin extends Plugin {
     // Register metadata cache change events to rebuild cache
     this.registerEvent(
       this.app.metadataCache.on('changed', (file) => {
-        if (file instanceof TFile && file.extension === 'md') {
+        if (file instanceof TFile && (file.extension === 'md' || (file.extension === 'mdx' && this.settings.enableMdxSupport))) {
           this.cacheService.rebuildCache();
           // Refresh graph view when metadata changes (to update visible nodes)
           if (this.settings.enableForGraphView) {

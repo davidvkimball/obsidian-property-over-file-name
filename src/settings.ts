@@ -14,6 +14,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   enableForExplorer: false,
   folderNoteFilename: '',
   enableForWindowFrame: true,
+  enableMdxSupport: false,
 };
 
 export function validateSettings(settings: PluginSettings): { isValid: boolean; errors: string[] } {

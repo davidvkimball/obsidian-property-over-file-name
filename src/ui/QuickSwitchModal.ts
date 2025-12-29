@@ -1,6 +1,7 @@
 import { App, FuzzySuggestModal, MarkdownView, Notice, TFile, prepareFuzzySearch, prepareSimpleSearch, FuzzyMatch, sortSearchResults, SearchResult } from 'obsidian';
 import { QuickSwitchItem, CachedFileData, SearchMatchReason, PropertyOverFileNamePlugin, WorkspaceInternal, QuickSwitcherPluginInstance, UnresolvedLinkItem, NewNoteItem, AppInternal } from '../types';
 import { buildFileCache } from '../utils/search';
+import { getFrontmatterSync } from '../utils/frontmatter';
 
 export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']> {
   private plugin: PropertyOverFileNamePlugin;
@@ -21,7 +22,7 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
       this.setPlaceholder('Type to search files...');
     }
     
-    this.buildFileCache();
+    void this.buildFileCache();
     this.updateRecentFiles();
     this.addKeyboardNavigation();
     this.addFooter();
@@ -66,18 +67,26 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
     }
   }
 
-  buildFileCache(): void {
+  async buildFileCache(): Promise<void> {
     const files = this.getFilteredFiles();
-    this.fileCache = buildFileCache(
+    this.fileCache = await buildFileCache(
       files,
       this.app.metadataCache,
-      this.plugin.settings.propertyKey
+      this.app,
+      this.plugin.settings.propertyKey,
+      this.plugin.settings
     );
   }
 
-  private updateFileCache(file: TFile): void {
-    const cache = this.app.metadataCache.getFileCache(file);
-    const frontmatter = cache?.frontmatter;
+  private async updateFileCache(file: TFile): Promise<void> {
+    const { getFrontmatter, isFileTypeSupported } = await import('../utils/frontmatter');
+    
+    // Skip unsupported file types
+    if (!isFileTypeSupported(file.extension, this.plugin.settings)) {
+      return;
+    }
+
+    const frontmatter = await getFrontmatter(this.app, file, this.plugin.settings);
     let displayName = file.basename;
     let isCustomDisplay = false;
     let aliases: string[] = [];
@@ -139,8 +148,11 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
     
     // Filter based on Quick Switcher settings BEFORE backfilling
     if (!showAttachments) {
-      // Filter out attachments - only show markdown files
-      recentFiles = recentFiles.filter(file => file.extension === 'md');
+      // Filter out attachments - only show markdown files (and MDX if enabled)
+      recentFiles = recentFiles.filter(file => 
+        file.extension === 'md' || 
+        (file.extension === 'mdx' && this.plugin.settings.enableMdxSupport)
+      );
     }
     
     // Always backfill to 8 items (or as many as available)
@@ -156,9 +168,15 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
           .slice(0, targetCount - recentFiles.length);
         recentFiles.push(...additionalFiles);
       } else {
-        // Only markdown files
+        // Only markdown files (and MDX if enabled)
         const allMarkdownFiles = this.app.vault.getMarkdownFiles();
-        const additionalFiles = allMarkdownFiles
+        const mdxFiles = this.plugin.settings.enableMdxSupport
+          ? this.app.vault.getFiles().filter(
+              (f): f is TFile => f instanceof TFile && f.extension === 'mdx'
+            )
+          : [];
+        const allSupportedFiles = [...allMarkdownFiles, ...mdxFiles];
+        const additionalFiles = allSupportedFiles
           .filter(file => !existingPaths.has(file.path))
           .slice(0, targetCount - recentFiles.length);
         recentFiles.push(...additionalFiles);
@@ -179,15 +197,27 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
     // Start with markdown files
     let files = this.app.vault.getMarkdownFiles();
     
+    // Add MDX files if MDX support is enabled
+    if (this.plugin.settings.enableMdxSupport) {
+      const mdxFiles = this.app.vault.getFiles().filter(
+        (f): f is TFile => f instanceof TFile && f.extension === 'mdx'
+      );
+      files = [...files, ...mdxFiles];
+    }
+    
     // If we can access Quick Switcher options and attachments are enabled, include them
     if (quickSwitcherOptions?.showAttachments) {
       const allFiles = this.app.vault.getFiles().filter((file): file is TFile => file instanceof TFile);
-      // Include markdown files and attachments
-      files = allFiles.filter(file => 
-        file.extension === 'md' || this.isAttachment(file)
+      // Include markdown files, MDX files (if enabled), and attachments
+      files = allFiles.filter((file): file is TFile => 
+        file instanceof TFile && (
+          file.extension === 'md' || 
+          (file.extension === 'mdx' && this.plugin.settings.enableMdxSupport) ||
+          this.isAttachment(file)
+        )
       );
     }
-    // If showAttachments is false or we can't access options, only show markdown files (default behavior)
+    // If showAttachments is false or we can't access options, only show markdown files (and MDX if enabled)
 
     return files;
   }
@@ -209,8 +239,7 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
       }
 
       return switcherPlugin.instance.options || null;
-    } catch (error) {
-      console.warn('Property Over Filename: Could not access Quick Switcher options:', error);
+    } catch {
       return null;
     }
   }
@@ -234,15 +263,25 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
   }
 
   getDisplayName(file: TFile): string {
-    const cache = this.app.metadataCache.getFileCache(file);
-    const frontmatter = cache?.frontmatter;
-    const propertyValue = frontmatter?.[this.plugin.settings.propertyKey] as unknown;
-    if (propertyValue !== undefined && propertyValue !== null) {
-      const trimmed = typeof propertyValue === 'string' ? propertyValue.trim() : (typeof propertyValue === 'number' || typeof propertyValue === 'boolean' ? String(propertyValue) : '').trim();
-      if (trimmed !== '') {
-        return trimmed;
+    // Try to get from cache first (fast, works for both MD and MDX if cached)
+    const cached = this.fileCache.get(file.path);
+    if (cached) {
+      return cached.displayName;
+    }
+    
+    // Fallback: use sync version for .md files, or return basename for .mdx (will be cached async)
+    const frontmatter = getFrontmatterSync(this.app, file, this.plugin.settings);
+    
+    if (frontmatter) {
+      const propertyValue = frontmatter[this.plugin.settings.propertyKey];
+      if (propertyValue !== undefined && propertyValue !== null) {
+        const trimmed = typeof propertyValue === 'string' ? propertyValue.trim() : (typeof propertyValue === 'number' || typeof propertyValue === 'boolean' ? String(propertyValue) : '').trim();
+        if (trimmed !== '') {
+          return trimmed;
+        }
       }
     }
+    
     return file.basename;
   }
 
@@ -471,8 +510,7 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
       }
 
       return filteredResults.slice(0, this.limit);
-    } catch (error) {
-      console.error('Error generating suggestions:', error);
+    } catch {
       new Notice('Error updating quick switcher suggestions. Please check console for details.');
       return [];
     }

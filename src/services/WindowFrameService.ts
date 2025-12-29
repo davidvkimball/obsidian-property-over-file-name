@@ -1,5 +1,6 @@
 import { TFile } from 'obsidian';
 import { PropertyOverFileNamePlugin, WorkspaceExt } from '../types';
+import { getFrontmatter } from '../utils/frontmatter';
 
 /**
  * Window Frame Service
@@ -23,11 +24,36 @@ export class WindowFrameService {
   private getActiveFileTitle(): string {
     const activeFile = this.plugin.app.workspace.getActiveFile();
     if (activeFile instanceof TFile) {
-      const cache = this.plugin.app.metadataCache.getFileCache(activeFile);
-      const propertyValue = cache?.frontmatter?.[this.plugin.settings.propertyKey] as string | undefined;
-      if (propertyValue) {
-        return String(propertyValue);
+      // For MD files, use metadata cache (fast sync access)
+      if (activeFile.extension === 'md') {
+        const fileCache = this.plugin.app.metadataCache.getFileCache(activeFile);
+        const propertyValue = fileCache?.frontmatter?.[this.plugin.settings.propertyKey] as string | undefined;
+        if (propertyValue) {
+          return String(propertyValue);
+        }
+        return activeFile.basename;
       }
+      
+      // For MDX files, trigger async read and return filename for now
+      // The title will update once the cache is populated
+      if (activeFile.extension === 'mdx' && this.plugin.settings.enableMdxSupport) {
+        void (async () => {
+          const frontmatter = await getFrontmatter(this.plugin.app, activeFile, this.plugin.settings);
+          const propertyValue = frontmatter?.[this.plugin.settings.propertyKey] as string | undefined;
+          if (propertyValue) {
+            // Update title asynchronously
+            const app = this.plugin.app as { getAppTitle?: (title: string) => string };
+            if (typeof app.getAppTitle === 'function') {
+              document.title = app.getAppTitle(String(propertyValue));
+            } else {
+              const vaultName = this.plugin.app.vault.getName();
+              document.title = `${String(propertyValue)} - ${vaultName}`;
+            }
+          }
+        })();
+        return activeFile.basename; // Return filename immediately, will update async
+      }
+      
       return activeFile.basename;
     }
     return '';

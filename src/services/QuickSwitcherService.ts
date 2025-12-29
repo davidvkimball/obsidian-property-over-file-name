@@ -72,15 +72,13 @@ export class QuickSwitcherService {
           import('../ui/QuickSwitchModal').then(({ QuickSwitchModal }) => {
             const modal = new QuickSwitchModal(this.plugin.app, this.plugin);
             modal.open();
-          }).catch((error) => {
-            console.error('Error loading QuickSwitchModal:', error);
+          }).catch(() => {
             // Fallback to original command if our modal fails
             if (this.originalSwitcherCommand && this.originalSwitcherCommand.callback) {
               this.originalSwitcherCommand.callback();
             }
           });
-        } catch (error) {
-          console.error('Error creating QuickSwitchModal:', error);
+        } catch {
           // Fallback to original command if our modal fails
           if (this.originalSwitcherCommand && this.originalSwitcherCommand.callback) {
             this.originalSwitcherCommand.callback();

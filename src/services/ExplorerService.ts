@@ -65,11 +65,18 @@ export class ExplorerService {
    * Resolve title for a file or folder
    * Public so ExplorerFileItemMutator can access it
    */
-  resolveTitle(item: TFileExplorerItem): string | null {
+  async resolveTitle(item: TFileExplorerItem): Promise<string | null> {
     if (item.file instanceof TFile) {
       // For files, use property-based title
-      const cache = this.plugin.app.metadataCache.getFileCache(item.file);
-      const propertyValue = cache?.frontmatter?.[this.plugin.settings.propertyKey] as string | undefined;
+      const { getFrontmatter, isFileTypeSupported } = await import('../utils/frontmatter');
+      
+      // Skip unsupported file types
+      if (!isFileTypeSupported(item.file.extension, this.plugin.settings)) {
+        return null;
+      }
+
+      const frontmatter = await getFrontmatter(this.plugin.app, item.file, this.plugin.settings);
+      const propertyValue = frontmatter?.[this.plugin.settings.propertyKey] as string | undefined;
       return propertyValue ? String(propertyValue) : null;
     } else if (item.file instanceof TFolder) {
       // For folders, check for folder note
@@ -214,10 +221,12 @@ class ExplorerFileItemMutator {
     
     // Replace with property-based title if enabled
     if (this.service.plugin.settings.enableForExplorer) {
-      const title = this.service.resolveTitle(this.item);
-      if (title && title.length > 0) {
-        this.item.innerEl.setText(title);
-      }
+      void (async () => {
+        const title = await this.service.resolveTitle(this.item);
+        if (title && title.length > 0) {
+          this.item.innerEl.setText(title);
+        }
+      })();
     }
   }
 

@@ -12,6 +12,7 @@
 
 import { App, View, WorkspaceLeaf } from 'obsidian';
 import { PropertyOverFileNamePlugin } from '../types';
+import { frontmatterCache } from '../utils/frontmatter-cache';
 
 // Type definitions for graph view internals
 interface GraphNodeCollection {
@@ -75,12 +76,33 @@ export class GraphViewService {
       // Try to get property value
       const file = app.vault.getFileByPath(this.id);
       if (file) {
-        const fileCache = app.metadataCache.getFileCache(file);
-        const frontmatter = fileCache?.frontmatter;
-        if (frontmatter && frontmatter[plugin.settings.propertyKey] !== undefined && frontmatter[plugin.settings.propertyKey] !== null) {
-          const propertyValue = String(frontmatter[plugin.settings.propertyKey]).trim();
-          if (propertyValue !== '') {
-            return propertyValue;
+        // For MD files, use metadata cache directly (fast sync access)
+        if (file.extension === 'md') {
+          const fileCache = app.metadataCache.getFileCache(file);
+          const mdFrontmatter = fileCache?.frontmatter;
+          if (mdFrontmatter && mdFrontmatter[plugin.settings.propertyKey] !== undefined && mdFrontmatter[plugin.settings.propertyKey] !== null) {
+            const propertyValue = String(mdFrontmatter[plugin.settings.propertyKey]).trim();
+            if (propertyValue !== '') {
+              return propertyValue;
+            }
+          }
+        }
+        
+        // For MDX files, use cache (populated async, but accessed sync)
+        if (file.extension === 'mdx' && plugin.settings.enableMdxSupport) {
+          // Trigger async read to populate cache if not already cached (fire and forget)
+          const cached = frontmatterCache.getSync(file.path);
+          if (!cached) {
+            void frontmatterCache.get(app, file, plugin.settings);
+          }
+          
+          // Try to get from cache
+          const frontmatter = frontmatterCache.getSync(file.path);
+          if (frontmatter && frontmatter[plugin.settings.propertyKey] !== undefined && frontmatter[plugin.settings.propertyKey] !== null) {
+            const propertyValue = String(frontmatter[plugin.settings.propertyKey]).trim();
+            if (propertyValue !== '') {
+              return propertyValue;
+            }
           }
         }
       }
@@ -114,6 +136,19 @@ export class GraphViewService {
   }
 
   private overridePrototype(view: GraphView | LocalGraphView) {
+    // Pre-populate cache for MDX files in the graph
+    if (this.plugin.settings.enableMdxSupport) {
+      void (async () => {
+        for (const node of view.renderer.nodes) {
+          const file = this.plugin.app.vault.getFileByPath(node.id);
+          if (file && file.extension === 'mdx') {
+            // Trigger async read to populate cache
+            void frontmatterCache.get(this.plugin.app, file, this.plugin.settings);
+          }
+        }
+      })();
+    }
+
     // Try to get first node - handle both Set and custom collection types
     let firstNode: GraphNode | undefined;
     const nodesWithFirst = view.renderer.nodes as GraphNodeCollectionWithFirst;

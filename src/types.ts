@@ -14,6 +14,7 @@ export interface PluginSettings {
   enableForExplorer: boolean;
   folderNoteFilename: string;
   enableForWindowFrame: boolean;
+  enableMdxSupport: boolean;
 }
 
 export interface CachedFileData {
@@ -115,8 +116,8 @@ export interface PropertyOverFileNamePlugin extends Plugin {
 }
 
 export interface EditorSuggest {
-  updateFileCache(file: TFile): void;
-  buildFileCache(): void;
+  updateFileCache(file: TFile): void | Promise<void>;
+  buildFileCache(): void | Promise<void>;
 }
 
 // File Explorer types

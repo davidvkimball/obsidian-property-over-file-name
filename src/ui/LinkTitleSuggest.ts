@@ -11,7 +11,7 @@ export class LinkTitleSuggest extends EditorSuggest<SuggestionItem> {
   constructor(plugin: PropertyOverFileNamePlugin) {
     super(plugin.app);
     this.plugin = plugin;
-    this.buildFileCache();
+    void this.buildFileCache();
   }
 
   open(): void {
@@ -61,17 +61,36 @@ export class LinkTitleSuggest extends EditorSuggest<SuggestionItem> {
     return null;
   }
 
-  buildFileCache(): void {
-    this.fileCache = buildFileCache(
-      this.app.vault.getMarkdownFiles(),
+  async buildFileCache(): Promise<void> {
+    // Get all markdown files and MDX files (if enabled)
+    const mdFiles = this.app.vault.getMarkdownFiles();
+    const allFiles = [...mdFiles];
+    
+    if (this.plugin.settings.enableMdxSupport) {
+      const mdxFiles = this.app.vault.getFiles().filter(
+        (f): f is TFile => f instanceof TFile && f.extension === 'mdx'
+      );
+      allFiles.push(...mdxFiles);
+    }
+    
+    this.fileCache = await buildFileCache(
+      allFiles,
       this.app.metadataCache,
-      this.plugin.settings.propertyKey
+      this.app,
+      this.plugin.settings.propertyKey,
+      this.plugin.settings
     );
   }
 
-  updateFileCache(file: TFile): void {
-    const cache = this.app.metadataCache.getFileCache(file);
-    const frontmatter = cache?.frontmatter;
+  async updateFileCache(file: TFile): Promise<void> {
+    const { getFrontmatter, isFileTypeSupported } = await import('../utils/frontmatter');
+    
+    // Skip unsupported file types
+    if (!isFileTypeSupported(file.extension, this.plugin.settings)) {
+      return;
+    }
+
+    const frontmatter = await getFrontmatter(this.app, file, this.plugin.settings);
     let displayName = file.basename;
     let isCustomDisplay = false;
     let aliases: string[] = [];
@@ -527,8 +546,7 @@ export class LinkTitleSuggest extends EditorSuggest<SuggestionItem> {
     const newCursorPos = start.ch + linkText.length;
     try {
       editor.setCursor({ line: start.line, ch: newCursorPos });
-    } catch (error) {
-      console.error('Error setting cursor:', error);
+    } catch {
       new Notice('Error setting cursor position. Please check console for details.');
     }
   }
@@ -545,8 +563,7 @@ export class LinkTitleSuggest extends EditorSuggest<SuggestionItem> {
       }
 
       return switcherPlugin.instance.options || null;
-    } catch (error) {
-      console.warn('Property Over Filename: Could not access Quick Switcher options:', error);
+    } catch {
       return null;
     }
   }

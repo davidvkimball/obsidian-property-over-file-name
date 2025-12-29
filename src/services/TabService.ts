@@ -12,6 +12,7 @@
 
 import { MarkdownView } from 'obsidian';
 import { PropertyOverFileNamePlugin } from '../types';
+import { getFrontmatter } from '../utils/frontmatter';
 
 export class TabService {
   private plugin: PropertyOverFileNamePlugin;
@@ -43,26 +44,29 @@ export class TabService {
 
       if (view?.file) {
         const file = view.file;
-        const cache = this.plugin.app.metadataCache.getFileCache(file);
-        const propertyValue = cache?.frontmatter?.[this.plugin.settings.propertyKey] as string | undefined;
-        const tabHeaderEl = (leaf as { tabHeaderEl?: HTMLElement }).tabHeaderEl;
+        // Use async version to support MDX files
+        void (async () => {
+          const frontmatter = await getFrontmatter(this.plugin.app, file, this.plugin.settings);
+          const propertyValue = frontmatter?.[this.plugin.settings.propertyKey] as string | undefined;
+          const tabHeaderEl = (leaf as { tabHeaderEl?: HTMLElement }).tabHeaderEl;
 
-        if (tabHeaderEl) {
-          // Always mark tabs as processed so they're not dimmed (even when feature is disabled)
-          tabHeaderEl.setAttribute('data-pov-title-set', 'true');
-          
-          // Only change the title if the feature is enabled
-          if (this.plugin.settings.enableForTabs) {
-            const titleEl = tabHeaderEl.querySelector('.workspace-tab-header-inner-title');
-            const displayText = propertyValue ? String(propertyValue) : file.basename;
-            if (titleEl) {
-              titleEl.setText(displayText);
+          if (tabHeaderEl) {
+            // Always mark tabs as processed so they're not dimmed (even when feature is disabled)
+            tabHeaderEl.setAttribute('data-pov-title-set', 'true');
+            
+            // Only change the title if the feature is enabled
+            if (this.plugin.settings.enableForTabs) {
+              const titleEl = tabHeaderEl.querySelector('.workspace-tab-header-inner-title');
+              const displayText = propertyValue ? String(propertyValue) : file.basename;
+              if (titleEl) {
+                titleEl.setText(displayText);
+              }
+
+              tabHeaderEl.setAttribute('aria-label', displayText);
+              tabHeaderEl.setAttribute('title', displayText);
             }
-
-            tabHeaderEl.setAttribute('aria-label', displayText);
-            tabHeaderEl.setAttribute('title', displayText);
           }
-        }
+        })();
       }
     });
   }

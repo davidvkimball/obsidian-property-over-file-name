@@ -23,13 +23,19 @@ export class BacklinkService {
   /**
    * Get display name from file's frontmatter property
    */
-  private getDisplayName(file: TFile): string | null {
+  private async getDisplayName(file: TFile): Promise<string | null> {
     if (!this.plugin.settings.enableForBacklinks) {
       return null;
     }
 
-    const fileCache = this.plugin.app.metadataCache.getFileCache(file);
-    const frontmatter = fileCache?.frontmatter;
+    const { getFrontmatter, isFileTypeSupported } = await import('../utils/frontmatter');
+    
+    // Skip unsupported file types
+    if (!isFileTypeSupported(file.extension, this.plugin.settings)) {
+      return null;
+    }
+
+    const frontmatter = await getFrontmatter(this.plugin.app, file, this.plugin.settings);
     
     if (frontmatter && frontmatter[this.plugin.settings.propertyKey] !== undefined && frontmatter[this.plugin.settings.propertyKey] !== null) {
       const propertyValue = String(frontmatter[this.plugin.settings.propertyKey]).trim();
@@ -222,12 +228,13 @@ export class BacklinkService {
    * Update an element with file's display name
    */
   private updateElementWithFile(element: HTMLElement, file: TFile): void {
-    const displayName = this.getDisplayName(file);
-    
-    if (displayName === null) {
-      // No property, use default behavior (file name)
-      return;
-    }
+    void (async () => {
+      const displayName = await this.getDisplayName(file);
+      
+      if (displayName === null) {
+        // No property, use default behavior (file name)
+        return;
+      }
 
     // Mark as processed
     this.processedElements.add(element);
@@ -281,6 +288,7 @@ export class BacklinkService {
         updateTextInElement(element);
       }
     }
+    })();
   }
 
   /**
@@ -357,16 +365,18 @@ export class BacklinkService {
         // Also try to update immediately if we can extract the file
         const file = this.extractFilePathFromElement(el);
         if (file && file instanceof TFile) {
-          const displayName = this.getDisplayName(file);
-          if (displayName) {
-            // Check current text and replace if it's the filename
-            const currentText = el.textContent?.trim() || '';
-            if (currentText === file.basename || currentText === file.name) {
-              el.textContent = displayName;
-              el.setAttribute('data-pov-processed', 'true');
-              this.processedElements.add(el);
+          void (async () => {
+            const displayName = await this.getDisplayName(file);
+            if (displayName) {
+              // Check current text and replace if it's the filename
+              const currentText = el.textContent?.trim() || '';
+              if (currentText === file.basename || currentText === file.name) {
+                el.textContent = displayName;
+                el.setAttribute('data-pov-processed', 'true');
+                this.processedElements.add(el);
+              }
             }
-          }
+          })();
         }
       });
 
@@ -455,15 +465,20 @@ export class BacklinkService {
             // Check if this looks like a filename that should be replaced
             const file = this.extractFilePathFromElement(element);
             if (file && file instanceof TFile) {
-              const displayName = this.getDisplayName(file);
-              if (displayName && (value === file.basename || value === file.name || value.endsWith(file.basename))) {
-                // Replace with property value using original setter
-                originalDescriptor.set!.call(element, displayName);
-                // Mark as processed
-                element.setAttribute('data-pov-processed', 'true');
-                this.processedElements.add(element);
-                return;
-              }
+              void (async () => {
+                const displayName = await this.getDisplayName(file);
+                if (displayName && (value === file.basename || value === file.name || value.endsWith(file.basename))) {
+                  // Replace with property value using original setter
+                  originalDescriptor.set!.call(element, displayName);
+                  // Mark as processed
+                  element.setAttribute('data-pov-processed', 'true');
+                  this.processedElements.add(element);
+                  return;
+                }
+                // Not a filename or no property, use original behavior
+                originalDescriptor.set!.call(element, value);
+              })();
+              return;
             }
 
             // Not a filename or no property, use original behavior
