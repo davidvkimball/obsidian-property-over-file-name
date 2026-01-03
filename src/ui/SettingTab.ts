@@ -18,7 +18,7 @@ export class SettingTab extends PluginSettingTab {
     containerEl.addClass('property-over-filename-settings');
 
     // Create a single settings group with no heading (following UI Tweaker pattern)
-    const generalGroup = createSettingsGroup(containerEl);
+    const generalGroup = createSettingsGroup(containerEl, undefined, 'property-over-file-name');
 
     generalGroup.addSetting((setting) => {
       setting
