@@ -10,12 +10,13 @@
  * Original code is licensed under MIT. This file is also licensed under GPLv3.
  */
 
-import { MarkdownView } from 'obsidian';
+import { MarkdownView, WorkspaceLeaf, EventRef } from 'obsidian';
 import { PropertyOverFileNamePlugin } from '../types';
 import { getFrontmatter } from '../utils/frontmatter';
 
 export class TabService {
   private plugin: PropertyOverFileNamePlugin;
+  private leafEventRefs: Map<WorkspaceLeaf, EventRef> = new Map();
 
   constructor(plugin: PropertyOverFileNamePlugin) {
     this.plugin = plugin;
@@ -72,14 +73,55 @@ export class TabService {
   }
 
   /**
+   * Register pinned-change event listeners on all markdown leaves
+   * This ensures tab titles are re-applied when tabs are pinned/unpinned
+   */
+  private registerLeafListeners() {
+    const currentLeaves = this.plugin.app.workspace.getLeavesOfType('markdown');
+    const currentLeafSet = new Set(currentLeaves);
+
+    // Register listeners on new leaves
+    currentLeaves.forEach((leaf) => {
+      if (!this.leafEventRefs.has(leaf)) {
+        // Register pinned-change listener with a delay to let Obsidian finish DOM updates
+        const eventRef = leaf.on('pinned-change', () => {
+          // Use requestAnimationFrame for better timing with DOM updates
+          requestAnimationFrame(() => {
+            // Small additional delay to ensure Obsidian has finished updating
+            setTimeout(() => {
+              void this.renameTabs();
+            }, 50);
+          });
+        });
+        this.leafEventRefs.set(leaf, eventRef);
+      }
+    });
+
+    // Clean up listeners for leaves that no longer exist
+    for (const [leaf, eventRef] of this.leafEventRefs.entries()) {
+      if (!currentLeafSet.has(leaf)) {
+        leaf.offref(eventRef);
+        this.leafEventRefs.delete(leaf);
+      }
+    }
+  }
+
+  /**
    * Register event listeners for tab renaming
    * EXACT copy of the working implementation from obsidian-title-only-tab
    */
   async registerEvents() {
     await this.renameTabs();
 
+    // Register leaf-level pinned-change listeners
+    this.registerLeafListeners();
+
     this.plugin.registerEvent(
-      this.plugin.app.workspace.on('layout-change', () => this.renameTabs())
+      this.plugin.app.workspace.on('layout-change', () => {
+        void this.renameTabs();
+        // Re-register leaf listeners to catch newly created leaves
+        this.registerLeafListeners();
+      })
     );
 
     this.plugin.registerEvent(
@@ -110,6 +152,10 @@ export class TabService {
    * Cleanup on unload
    */
   onunload() {
-    // No cleanup needed - events are automatically unregistered by Obsidian
+    // Unregister all leaf-level event listeners
+    for (const [leaf, eventRef] of this.leafEventRefs.entries()) {
+      leaf.offref(eventRef);
+    }
+    this.leafEventRefs.clear();
   }
 }
