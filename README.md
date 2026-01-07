@@ -36,10 +36,10 @@ Property Over File Name is not yet available in the Community plugins section. I
 3. In Obsidian, go to Settings > Community plugins (enable it if you haven't already) and then enable "Property Over File Name."
 
 ## Usage
-- **Link Suggester**: Type `[[` to see suggestions based on the frontmatter `title` (or configured property). Select a note to insert a link (e.g., `[[file name|Title]]` or `[Title](path)` for Markdown links).
+- **Link Suggester**: Type `[[` to see suggestions based on the `title` property (or configured property). Select a note to insert a link (e.g., `[[file name|Title]]` or `[Title](path)` for Markdown links).
 - **Quick Switcher**: Press `Ctrl+O` to search notes by title (or file name/aliases if enabled). Select to open or create a note.
 - **Settings**: Go to **Settings → Property Over File Name**.
-  - **Property key**: Set the frontmatter property for titles (default: `title`).
+  - **Property key**: Set the property for titles (default: `title`).
   - **When linking notes**: Enable/disable property-based titles in link suggester.
   - **In Quick Switcher**: Enable/disable property-based titles in Quick Switcher.
   - **In tab titles**: Enable/disable property-based titles in tab headers.
@@ -48,7 +48,7 @@ Property Over File Name is not yet available in the Community plugins section. I
   - **In window frame**: Enable/disable property-based titles in window title bar.
   - **In file explorer**: Enable/disable property-based titles in file explorer.
   - **Include file name in fuzzy searches**: Include note file names in search results.
-  - **Include aliases in fuzzy searches**: Include frontmatter `aliases` in search results.
+  - **Include aliases in fuzzy searches**: Include `aliases` property in search results.
   - **Use simple search**: Toggle simple search mode for larger vaults.
   - **Folder note filename**: Specify filename pattern for folder notes.
 

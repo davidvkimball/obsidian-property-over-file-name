@@ -16,7 +16,7 @@ Applicability: Plugin
 
 ### Project Overview
 
-Property Over File Name is an Obsidian plugin that displays note properties (e.g., `title` from frontmatter) instead of file names across various Obsidian UI components. This is particularly useful for content management systems where notes have human-readable titles that differ from their file names.
+Property Over File Name is an Obsidian plugin that displays note properties (e.g., `title` property) instead of file names across various Obsidian UI components. This is particularly useful for content management systems where notes have human-readable titles that differ from their file names.
 
 The plugin integrates with multiple Obsidian UI components:
 - **Link Suggester**: Shows property-based titles when typing `[[`
@@ -35,7 +35,7 @@ This plugin is part of the [Vault CMS](https://github.com/davidvkimball/vault-cm
 ### Important Project-Specific Details
 
 - **Type**: Plugin
-- **Purpose**: Display custom frontmatter properties instead of file names across Obsidian UI components
+- **Purpose**: Display custom properties instead of file names across Obsidian UI components
 - **Status**: Beta (installed via BRAT or manually)
 - **Min App Version**: 0.15.0
 - **License**: GPL-3.0
@@ -65,6 +65,8 @@ This plugin is part of the [Vault CMS](https://github.com/davidvkimball/vault-cm
 - **Testing**: Test on both desktop and mobile (plugin is not desktop-only)
 
 ### Project-Specific Conventions
+
+- **Terminology: Use "properties" not "frontmatter"**: Obsidian prefers the term "properties" over "frontmatter" or "front-matter" when referring to YAML metadata at the top of markdown files. All documentation, code comments, and UI text should use "properties" to align with Obsidian's official terminology.
 
 - **Service-based architecture**: Each UI component has its own service class in `src/services/`
 - **Cache-based property retrieval**: CacheService manages property caching for performance
