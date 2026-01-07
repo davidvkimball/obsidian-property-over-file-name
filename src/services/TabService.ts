@@ -27,7 +27,7 @@ export class TabService {
    * Falls back to file basename if property is not found
    * EXACT copy of the working implementation from obsidian-title-only-tab
    */
-  async renameTabs() {
+  renameTabs() {
     const leaves = this.plugin.app.workspace.getLeavesOfType('markdown');
     leaves.forEach((leaf) => {
       /*
@@ -110,8 +110,8 @@ export class TabService {
    * Register event listeners for tab renaming
    * EXACT copy of the working implementation from obsidian-title-only-tab
    */
-  async registerEvents() {
-    await this.renameTabs();
+  registerEvents() {
+    this.renameTabs();
 
     // Register leaf-level pinned-change listeners
     this.registerLeafListeners();

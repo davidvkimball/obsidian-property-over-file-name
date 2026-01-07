@@ -138,7 +138,7 @@ export class GraphViewService {
   private overridePrototype(view: GraphView | LocalGraphView) {
     // Pre-populate cache for MDX files in the graph
     if (this.plugin.settings.enableMdxSupport) {
-      void (async () => {
+      (() => {
         for (const node of view.renderer.nodes) {
           const file = this.plugin.app.vault.getFileByPath(node.id);
           if (file && file.extension === 'mdx') {

@@ -171,7 +171,7 @@ export class DragDropService {
     }
 
     // Get the display name from frontmatter (only if property exists)
-    void (async () => {
+    (() => {
       // For .md files, use synchronous logic (fast, immediate)
       // For .mdx files, use async logic with retries (needs file reading)
       if (file.extension === 'md') {

@@ -40,7 +40,7 @@ export default class PropertyOverFileNamePlugin extends Plugin {
     this.windowFrameService = new WindowFrameService(this);
     
     // Register tab service events and rename tabs immediately
-    await this.tabService.registerEvents();
+    this.tabService.registerEvents();
     
     // Register explorer and window frame services
     this.explorerService.registerEvents();
@@ -48,7 +48,7 @@ export default class PropertyOverFileNamePlugin extends Plugin {
     
     // Pre-populate frontmatter cache for MDX files if enabled
     if (this.settings.enableMdxSupport) {
-      void (async () => {
+      (() => {
         const mdxFiles = this.app.vault.getFiles().filter(
           (f): f is TFile => f instanceof TFile && f.extension === 'mdx'
         );
