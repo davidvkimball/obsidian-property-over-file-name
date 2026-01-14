@@ -12,6 +12,7 @@ import { BacklinkService } from './services/BacklinkService';
 import { TabService } from './services/TabService';
 import { ExplorerService } from './services/ExplorerService';
 import { WindowFrameService } from './services/WindowFrameService';
+import { BookmarkService } from './services/BookmarkService';
 import { frontmatterCache } from './utils/frontmatter-cache';
 
 export default class PropertyOverFileNamePlugin extends Plugin {
@@ -25,6 +26,7 @@ export default class PropertyOverFileNamePlugin extends Plugin {
   private tabService!: TabService;
   private explorerService!: ExplorerService;
   private windowFrameService!: WindowFrameService;
+  private bookmarkService!: BookmarkService;
 
   async onload() {
     await this.loadSettings();
@@ -38,6 +40,7 @@ export default class PropertyOverFileNamePlugin extends Plugin {
     this.tabService = new TabService(this);
     this.explorerService = new ExplorerService(this);
     this.windowFrameService = new WindowFrameService(this);
+    this.bookmarkService = new BookmarkService(this);
     
     // Register tab service events and rename tabs immediately
     this.tabService.registerEvents();
@@ -45,6 +48,9 @@ export default class PropertyOverFileNamePlugin extends Plugin {
     // Register explorer and window frame services
     this.explorerService.registerEvents();
     this.windowFrameService.registerEvents();
+    
+    // Initialize bookmarks service
+    this.bookmarkService.updateBookmarks();
     
     // Pre-populate frontmatter cache for MDX files if enabled
     if (this.settings.enableMdxSupport) {
@@ -67,6 +73,7 @@ export default class PropertyOverFileNamePlugin extends Plugin {
       this.updateTabs();
       this.updateExplorer();
       this.updateWindowFrame();
+      this.updateBookmarks();
     }, 1000);
 
     // Set up graph view handling
@@ -76,6 +83,7 @@ export default class PropertyOverFileNamePlugin extends Plugin {
       void this.tabService.renameTabs();
       this.updateExplorer();
       this.updateWindowFrame();
+      this.updateBookmarks();
     });
     this.registerEvent(
       this.app.workspace.on('layout-change', () => {
@@ -142,6 +150,10 @@ export default class PropertyOverFileNamePlugin extends Plugin {
           // Refresh window frame when metadata changes
           if (this.settings.enableForWindowFrame) {
             this.windowFrameService.updateWindowFrame();
+          }
+          // Refresh bookmarks when metadata changes
+          if (this.settings.enableForBookmarks) {
+            this.updateBookmarks();
           }
         }
       })
@@ -223,6 +235,10 @@ export default class PropertyOverFileNamePlugin extends Plugin {
     this.windowFrameService.updateWindowFrame();
   }
 
+  updateBookmarks() {
+    this.bookmarkService.updateBookmarks();
+  }
+
   rebuildCache() {
     this.cacheService.rebuildCache();
   }
@@ -251,6 +267,9 @@ export default class PropertyOverFileNamePlugin extends Plugin {
 
     // Clean up window frame service
     this.windowFrameService.onunload();
+
+    // Clean up bookmarks service
+    this.bookmarkService.onunload();
   }
 
   async loadSettings() {

@@ -14,6 +14,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   enableForExplorer: false,
   folderNoteFilename: '',
   enableForWindowFrame: true,
+  enableForBookmarks: true,
   enableMdxSupport: false,
 };
 

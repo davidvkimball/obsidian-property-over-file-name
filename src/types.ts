@@ -14,6 +14,7 @@ export interface PluginSettings {
   enableForExplorer: boolean;
   folderNoteFilename: string;
   enableForWindowFrame: boolean;
+  enableForBookmarks: boolean;
   enableMdxSupport: boolean;
 }
 
@@ -82,6 +83,10 @@ export interface QuickSwitcherPluginInstance {
   };
 }
 
+export interface InternalPlugin<T> {
+  instance?: T;
+}
+
 export interface AppInternal {
   commands: {
     commands: Record<string, {
@@ -93,9 +98,8 @@ export interface AppInternal {
     }>;
   };
   internalPlugins?: {
-    getPluginById?: (id: string) => {
-      instance?: QuickSwitcherPluginInstance;
-    } | null;
+    getPluginById(id: 'switcher'): InternalPlugin<QuickSwitcherPluginInstance> | null;
+    getPluginById(id: string): InternalPlugin<unknown> | null;
   };
 }
 
@@ -110,6 +114,7 @@ export interface PropertyOverFileNamePlugin extends Plugin {
   updateTabs(): void;
   updateExplorer(): void;
   updateWindowFrame(): void;
+  updateBookmarks(): void;
   rebuildCache(): void;
   saveSettings(prevQuickSwitcherState?: boolean, prevTabState?: boolean): Promise<void>;
   saveData(data: PluginSettings): Promise<void>;

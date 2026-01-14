@@ -37,6 +37,7 @@ export class SettingTab extends PluginSettingTab {
               this.plugin.updateTabs();
               this.plugin.updateExplorer();
               this.plugin.updateWindowFrame();
+              this.plugin.updateBookmarks();
             })
         );
     });
@@ -109,6 +110,21 @@ export class SettingTab extends PluginSettingTab {
             .onChange(async (value) => {
               this.plugin.settings.enableForDragDrop = value;
               await this.plugin.saveData(this.plugin.settings);
+            })
+        );
+    });
+
+    generalGroup.addSetting((setting) => {
+      setting
+        .setName('When naming bookmarks')
+        .setDesc('Automatically use the configured property value as the default name when creating a bookmark.')
+        .addToggle((toggle) =>
+          toggle
+            .setValue(this.plugin.settings.enableForBookmarks)
+            .onChange(async (value) => {
+              this.plugin.settings.enableForBookmarks = value;
+              await this.plugin.saveData(this.plugin.settings);
+              this.plugin.updateBookmarks();
             })
         );
     });
@@ -245,6 +261,7 @@ export class SettingTab extends PluginSettingTab {
               this.plugin.updateTabs();
               this.plugin.updateExplorer();
               this.plugin.updateWindowFrame();
+              this.plugin.updateBookmarks();
             })
         );
     });
