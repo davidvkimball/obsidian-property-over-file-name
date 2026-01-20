@@ -31,6 +31,11 @@ export default class PropertyOverFileNamePlugin extends Plugin {
   async onload() {
     await this.loadSettings();
     
+    // register the view and extensions
+    if (this.settings.enableMdxSupport) {
+      this.registerExtensions(['mdx'], 'markdown');
+    }
+    
     // Initialize services
     this.quickSwitcherService = new QuickSwitcherService(this);
     this.dragDropService = new DragDropService(this);
@@ -69,6 +74,7 @@ export default class PropertyOverFileNamePlugin extends Plugin {
     setTimeout(() => {
       this.updateLinkSuggester();
       this.updateQuickSwitcher();
+      this.updateGraphView();
       this.updateBacklinks();
       this.updateTabs();
       this.updateExplorer();
@@ -84,13 +90,29 @@ export default class PropertyOverFileNamePlugin extends Plugin {
       this.updateExplorer();
       this.updateWindowFrame();
       this.updateBookmarks();
+      // Also refresh graph view to ensure it's updated
+      setTimeout(() => {
+        this.graphViewService.refreshGraphView();
+      }, 500);
     });
+
+    // Listen for layout changes - exactly like Node Masquerade
     this.registerEvent(
       this.app.workspace.on('layout-change', () => {
         this.graphViewService.onLayoutChange();
         this.backlinkService.onLayoutChange();
       })
     );
+
+    // Periodic check for graph views - needed because layout-change fires before nodes are ready
+    this.registerInterval(window.setInterval(() => {
+      if (this.settings.enableForGraphView) {
+        const leaves = this.app.workspace.getLeavesOfType('graph').concat(this.app.workspace.getLeavesOfType('localgraph'));
+        if (leaves.length > 0) {
+          this.graphViewService.onLayoutChange();
+        }
+      }
+    }, 1000)); // Check every second
 
     // Set up backlinks handling
     this.registerEvent(

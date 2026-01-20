@@ -1,18 +1,73 @@
 /**
  * Graph View Service
- * 
+ *
  * This file contains code adapted from the Node Masquerade plugin by ElsaTam.
  * Original source: https://github.com/Kapirklaa/obsidian-node-masquerade
- * 
+ *
  * The code has been modified to integrate with the Property Over File Name plugin
  * and use the plugin's property key setting instead of Node Masquerade's configuration.
- * 
+ *
  * Original code is licensed under GPLv3. This file is also licensed under GPLv3.
  */
 
 import { App, View, WorkspaceLeaf } from 'obsidian';
 import { PropertyOverFileNamePlugin } from '../types';
 import { frontmatterCache } from '../utils/frontmatter-cache';
+
+// Static display settings - exactly like Node Masquerade
+let graphDisplaySettings: { enableForGraphView: boolean; propertyKey: string; enableMdxSupport: boolean; app: App } | null = null;
+
+function createGetDisplayText(app: App) {
+	return function getDisplayText(this: GraphNode): string {
+		if (!graphDisplaySettings?.enableForGraphView) {
+			// If disabled, use original
+			if (this.pov_originalGetDisplayText) {
+				return this.pov_originalGetDisplayText();
+			}
+			throw new Error('pov_originalGetDisplayText does not exist on node');
+		}
+
+		// Try to get property value - exactly like Node Masquerade logic but for properties
+		const file = app.vault.getFileByPath(this.id);
+		if (file) {
+			// For MD files, use metadata cache directly (fast sync access)
+			if (file.extension === 'md') {
+				const fileCache = app.metadataCache.getFileCache(file);
+				const mdFrontmatter = fileCache?.frontmatter;
+				if (mdFrontmatter && mdFrontmatter[graphDisplaySettings.propertyKey] !== undefined && mdFrontmatter[graphDisplaySettings.propertyKey] !== null) {
+					const propertyValue = String(mdFrontmatter[graphDisplaySettings.propertyKey]).trim();
+					if (propertyValue !== '') {
+						return propertyValue;
+					}
+				}
+			}
+
+			// For MDX files, use cache (populated async, but accessed sync)
+			if (file.extension === 'mdx' && graphDisplaySettings.enableMdxSupport) {
+				// Trigger async read to populate cache if not already cached (fire and forget)
+				const cached = frontmatterCache.getSync(file.path);
+				if (!cached) {
+					void frontmatterCache.get(app, file, { enableMdxSupport: graphDisplaySettings.enableMdxSupport, propertyKey: graphDisplaySettings.propertyKey } as any);
+				}
+
+				// Try to get from cache
+				const frontmatter = frontmatterCache.getSync(file.path);
+				if (frontmatter && frontmatter[graphDisplaySettings.propertyKey] !== undefined && frontmatter[graphDisplaySettings.propertyKey] !== null) {
+					const propertyValue = String(frontmatter[graphDisplaySettings.propertyKey]).trim();
+					if (propertyValue !== '') {
+						return propertyValue;
+					}
+				}
+			}
+		}
+
+		// Fall back to original display text (file name) - exactly like Node Masquerade
+		if (this.pov_originalGetDisplayText) {
+			return this.pov_originalGetDisplayText();
+		}
+		throw new Error('pov_originalGetDisplayText does not exist on node');
+	};
+}
 
 // Type definitions for graph view internals
 interface GraphNodeCollection {
@@ -41,13 +96,11 @@ interface GraphNode {
   };
   getDisplayText(): string;
   pov_originalGetDisplayText?: () => string;
-  pov_plugin?: PropertyOverFileNamePlugin;
 }
 
 interface GraphNodePrototype {
   getDisplayText(): string;
   pov_originalGetDisplayText?: () => string;
-  pov_plugin?: PropertyOverFileNamePlugin;
 }
 
 interface GraphNodeCollectionWithFirst extends GraphNodeCollection {
@@ -60,60 +113,15 @@ export class GraphViewService {
 
   constructor(plugin: PropertyOverFileNamePlugin) {
     this.plugin = plugin;
-  }
-
-  private createGetDisplayText(app: App) {
-    return function getDisplayText(this: GraphNode): string {
-      const plugin = this.pov_plugin;
-      if (!plugin || !plugin.settings.enableForGraphView) {
-        // If disabled or plugin not found, use original
-        if (this.pov_originalGetDisplayText) {
-          return this.pov_originalGetDisplayText();
-        }
-        throw new Error('pov_originalGetDisplayText does not exist on node');
-      }
-
-      // Try to get property value
-      const file = app.vault.getFileByPath(this.id);
-      if (file) {
-        // For MD files, use metadata cache directly (fast sync access)
-        if (file.extension === 'md') {
-          const fileCache = app.metadataCache.getFileCache(file);
-          const mdFrontmatter = fileCache?.frontmatter;
-          if (mdFrontmatter && mdFrontmatter[plugin.settings.propertyKey] !== undefined && mdFrontmatter[plugin.settings.propertyKey] !== null) {
-            const propertyValue = String(mdFrontmatter[plugin.settings.propertyKey]).trim();
-            if (propertyValue !== '') {
-              return propertyValue;
-            }
-          }
-        }
-        
-        // For MDX files, use cache (populated async, but accessed sync)
-        if (file.extension === 'mdx' && plugin.settings.enableMdxSupport) {
-          // Trigger async read to populate cache if not already cached (fire and forget)
-          const cached = frontmatterCache.getSync(file.path);
-          if (!cached) {
-            void frontmatterCache.get(app, file, plugin.settings);
-          }
-          
-          // Try to get from cache
-          const frontmatter = frontmatterCache.getSync(file.path);
-          if (frontmatter && frontmatter[plugin.settings.propertyKey] !== undefined && frontmatter[plugin.settings.propertyKey] !== null) {
-            const propertyValue = String(frontmatter[plugin.settings.propertyKey]).trim();
-            if (propertyValue !== '') {
-              return propertyValue;
-            }
-          }
-        }
-      }
-
-      // Fall back to original display text (file name)
-      if (this.pov_originalGetDisplayText) {
-        return this.pov_originalGetDisplayText();
-      }
-      throw new Error('pov_originalGetDisplayText does not exist on node');
+    // Set static display settings - exactly like Node Masquerade
+    graphDisplaySettings = {
+      enableForGraphView: plugin.settings.enableForGraphView,
+      propertyKey: plugin.settings.propertyKey,
+      enableMdxSupport: plugin.settings.enableMdxSupport,
+      app: plugin.app
     };
   }
+
 
   private getGraphLeaves(): WorkspaceLeaf[] {
     const leaves: WorkspaceLeaf[] = [];
@@ -123,10 +131,6 @@ export class GraphViewService {
   }
 
   private overridePrototypes() {
-    if (!this.plugin.settings.enableForGraphView) {
-      return;
-    }
-
     const leaves = this.getGraphLeaves();
     for (const leaf of leaves) {
       if (!(leaf.view instanceof View) || leaf.isDeferred) continue;
@@ -136,45 +140,38 @@ export class GraphViewService {
   }
 
   private overridePrototype(view: GraphView | LocalGraphView) {
-    // Pre-populate cache for MDX files in the graph
-    if (this.plugin.settings.enableMdxSupport) {
-      (() => {
-        for (const node of view.renderer.nodes) {
-          const file = this.plugin.app.vault.getFileByPath(node.id);
-          if (file && file.extension === 'mdx') {
-            // Trigger async read to populate cache
-            void frontmatterCache.get(this.plugin.app, file, this.plugin.settings);
-          }
-        }
-      })();
+    // Check if graph view has nodes loaded yet
+    let nodeCount = 0;
+    for (const graphNode of view.renderer.nodes) {
+      nodeCount++;
+      if (nodeCount > 0) break; // Just check if there's at least one
     }
 
-    // Try to get first node - handle both Set and custom collection types
-    let firstNode: GraphNode | undefined;
-    const nodesWithFirst = view.renderer.nodes as GraphNodeCollectionWithFirst;
-    if (typeof nodesWithFirst.first === 'function') {
-      firstNode = nodesWithFirst.first();
-    } else if (view.renderer.nodes instanceof Set) {
-      firstNode = (view.renderer.nodes.values().next().value as GraphNode | undefined);
-    } else {
-      // Fallback: iterate to get first
-      for (const node of view.renderer.nodes) {
-        firstNode = node;
-        break;
+    if (nodeCount === 0) {
+      // Graph view is empty, try again in 1 second
+      setTimeout(() => {
+        this.overridePrototype(view);
+      }, 1000);
+      return;
+    }
+
+    // Pre-populate cache for MDX files in the graph
+    if (graphDisplaySettings?.enableMdxSupport) {
+      for (const graphNode of view.renderer.nodes) {
+        const file = graphDisplaySettings.app.vault.getFileByPath(graphNode.id);
+        if (file && file.extension === 'mdx') {
+          void frontmatterCache.get(graphDisplaySettings.app, file, { enableMdxSupport: graphDisplaySettings.enableMdxSupport, propertyKey: graphDisplaySettings.propertyKey } as any);
+        }
       }
     }
 
-    if (firstNode) {
-      const proto = firstNode.constructor.prototype as GraphNodePrototype;
-      if (!proto.hasOwnProperty('pov_originalGetDisplayText') && !this.modifiedPrototypes.includes(proto)) {
-        // eslint-disable-next-line @typescript-eslint/unbound-method -- Function is designed to be called with `this` as GraphNode
+    const node = view.renderer.nodes.first();
+
+    if (node) {
+      const proto = node.constructor.prototype;
+      if (!proto.hasOwnProperty('pov_originalGetDisplayText') && !this.modifiedPrototypes.contains(proto)) {
         proto.pov_originalGetDisplayText = proto.getDisplayText;
-        const getDisplayTextFn = this.createGetDisplayText(this.plugin.app);
-        proto.getDisplayText = getDisplayTextFn;
-        // Store plugin reference on prototype for access in getDisplayText
-        proto.pov_plugin = this.plugin;
-        
-        // Update all existing nodes
+        proto.getDisplayText = createGetDisplayText(this.plugin.app);
         for (const node of view.renderer.nodes) {
           if (node.text) {
             node.text.text = node.getDisplayText();
@@ -192,21 +189,18 @@ export class GraphViewService {
         proto.getDisplayText = proto.pov_originalGetDisplayText;
         delete proto.pov_originalGetDisplayText;
       }
-      delete proto.pov_plugin;
     }
     this.modifiedPrototypes = [];
     this.rewriteNames();
   }
 
-  private rewriteNames() {
+  rewriteNames() {
     const leaves = this.getGraphLeaves();
     for (const leaf of leaves) {
       if (!(leaf.view instanceof View) || leaf.isDeferred) continue;
       const view = leaf.view as unknown as GraphView | LocalGraphView;
       for (const node of view.renderer.nodes) {
-        if (node.text) {
-          node.text.text = node.getDisplayText();
-        }
+        if (node.text) node.text.text = node.getDisplayText();
       }
       view.renderer.changed();
     }
@@ -217,16 +211,24 @@ export class GraphViewService {
       this.restorePrototypes();
       return;
     }
-    
-    // Check if graph plugin is loaded
-    const appInternal = this.plugin.app as App & { internalPlugins?: { getPluginById?: (id: string) => { _loaded?: boolean } | null } };
-    const graphPlugin = appInternal.internalPlugins?.getPluginById?.('graph');
-    if (!graphPlugin?._loaded) return;
-    
+
+    // Check if graph plugin is loaded - exactly like Node Masquerade
+    const appInternal = this.plugin.app as any;
+    const isGraphLoaded = appInternal.internalPlugins.getPluginById("graph")?._loaded;
+    if (!isGraphLoaded) return;
+
     this.overridePrototypes();
   }
 
+
   updateGraphView() {
+    // Update static display settings when plugin settings change
+    if (graphDisplaySettings) {
+      graphDisplaySettings.enableForGraphView = this.plugin.settings.enableForGraphView;
+      graphDisplaySettings.propertyKey = this.plugin.settings.propertyKey;
+      graphDisplaySettings.enableMdxSupport = this.plugin.settings.enableMdxSupport;
+    }
+
     if (this.plugin.settings.enableForGraphView) {
       this.overridePrototypes();
     } else {

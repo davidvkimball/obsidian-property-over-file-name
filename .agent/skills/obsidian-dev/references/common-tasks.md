@@ -426,4 +426,112 @@ The `checkCallback` receives a `checking` boolean:
 - When `true`: Only check if command can run (don't execute)
 - When `false`: Actually execute the command
 
+## Graph View Manipulation
+
+**Critical**: Graph views load asynchronously. The view exists before nodes are populated. Always check for nodes before attempting prototype overrides.
+
+### Basic Graph View Detection
+
+```ts
+// Check if graph views exist
+const graphLeaves = this.app.workspace.getLeavesOfType('graph');
+
+// Check if graph plugin is loaded
+const appInternal = this.app as any;
+const isGraphLoaded = appInternal.internalPlugins.getPluginById("graph")?._loaded;
+```
+
+### Safe Graph View Prototype Override
+
+```ts
+// DO NOT override prototype until nodes exist
+private overridePrototype(view: GraphView | LocalGraphView) {
+  // Always check for nodes first - graph views load empty initially
+  let nodeCount = 0;
+  for (const node of view.renderer.nodes) {
+    nodeCount++;
+    if (nodeCount > 0) break; // Just check if there's at least one
+  }
+
+  if (nodeCount === 0) {
+    // Retry later when nodes are loaded
+    setTimeout(() => this.overridePrototype(view), 1000);
+    return;
+  }
+
+  // Now safe to override prototype
+  const node = view.renderer.nodes.first();
+  if (node) {
+    const proto = node.constructor.prototype;
+    if (!proto.hasOwnProperty('customProperty')) {
+      proto.customProperty = originalFunction;
+      proto.getDisplayText = customFunction;
+
+      // Update existing nodes
+      for (const node of view.renderer.nodes) {
+        if (node.text) {
+          node.text.text = node.getDisplayText();
+        }
+      }
+      view.renderer.changed();
+    }
+  }
+}
+```
+
+### Graph View Event Handling
+
+```ts
+// Listen for layout changes (recommended approach)
+this.registerEvent(
+  this.app.workspace.on('layout-change', () => {
+    // Check graph plugin loaded first
+    const isGraphLoaded = (this.app as any).internalPlugins
+      .getPluginById("graph")?._loaded;
+    if (!isGraphLoaded) return;
+
+    this.checkAndOverrideGraphViews();
+  })
+);
+
+// Periodic check as backup (for timing issues)
+this.registerInterval(window.setInterval(() => {
+  const leaves = this.app.workspace.getLeavesOfType('graph');
+  if (leaves.length > 0) {
+    this.checkAndOverrideGraphViews();
+  }
+}, 1000));
+```
+
+### Property-Based Graph Node Display
+
+**Pattern**: Override `GraphNode.prototype.getDisplayText()` to show frontmatter properties instead of filenames.
+
+```ts
+function createGetDisplayText(app: App, propertyKey: string) {
+  return function getDisplayText(this: GraphNode): string {
+    const file = app.vault.getFileByPath(this.id);
+    if (file) {
+      const fileCache = app.metadataCache.getFileCache(file);
+      const frontmatter = fileCache?.frontmatter;
+      if (frontmatter && frontmatter[propertyKey]) {
+        const value = String(frontmatter[propertyKey]).trim();
+        if (value !== '') return value;
+      }
+    }
+    // Fallback to original
+    if (this.originalGetDisplayText) {
+      return this.originalGetDisplayText();
+    }
+    return this.id.split('/').pop() || this.id; // filename fallback
+  };
+}
+
+// Usage in prototype override:
+proto.originalGetDisplayText = proto.getDisplayText;
+proto.getDisplayText = createGetDisplayText(this.app, this.settings.propertyKey);
+```
+
+**Timing Issue**: Graph views render nodes before prototype override completes. Solution: Check for nodes, retry if empty, update all existing nodes immediately after override.
+
 
