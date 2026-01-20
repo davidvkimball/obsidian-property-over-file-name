@@ -33,7 +33,15 @@ export default class PropertyOverFileNamePlugin extends Plugin {
     
     // register the view and extensions
     if (this.settings.enableMdxSupport) {
-      this.registerExtensions(['mdx'], 'markdown');
+      try {
+        console.log('Registering MDX extension...');
+        this.registerExtensions(['mdx'], 'markdown');
+        console.log('MDX extension registered successfully');
+      } catch (error) {
+        console.error('Failed to register MDX extension:', error);
+        // Disable MDX support if registration fails
+        this.settings.enableMdxSupport = false;
+      }
     }
     
     // Initialize services

@@ -25,28 +25,36 @@ export async function getFrontmatter(
 
   // For .mdx files, only process if MDX support is enabled
   if (file.extension === 'mdx' && settings.enableMdxSupport) {
+    console.log('Processing MDX file:', file.path);
     try {
       // Read raw file content (works for any file type)
       const content = await app.vault.read(file);
-      
+      console.log('MDX content length:', content.length);
+
       // Extract frontmatter using regex (same format as .md files)
       // Match pattern: ---\n...content...\n--- (with or without trailing newline)
       const frontmatterRegex = /^---\n([\s\S]*?)\n---/;
       const match = content.match(frontmatterRegex);
-      
+
       if (match && match[1]) {
         const frontmatterText = match[1];
+        console.log('MDX frontmatter text:', frontmatterText);
         // Parse YAML using Obsidian's parseYaml utility
         try {
           const parsed = parseYaml(frontmatterText) as Record<string, unknown> | null | undefined;
+          console.log('MDX parsed frontmatter:', parsed);
           return parsed && typeof parsed === 'object' ? parsed : null;
-        } catch {
+        } catch (parseError) {
+          console.error('MDX YAML parse error:', parseError);
           return null;
         }
+      } else {
+        console.log('No frontmatter found in MDX file');
       }
-      
+
       return null;
-    } catch {
+    } catch (readError) {
+      console.error('Error reading MDX file:', readError);
       return null;
     }
   }
