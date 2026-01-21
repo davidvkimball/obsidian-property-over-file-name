@@ -1,6 +1,6 @@
 {
 	"name": "property-over-file-name",
-	"version": "0.6.8",
+	"version": "0.6.9",
 	"description": "Search, display, and insert notes using a specified note property instead of the file name.",
 	"main": "main.js",
 	"type": "module",

@@ -1,4 +1,4 @@
-import { Plugin, TFile } from 'obsidian';
+import { Plugin, TFile, App } from 'obsidian';
 import { PluginSettings, WorkspaceInternal, EditorSuggest } from './types';
 import { DEFAULT_SETTINGS } from './settings';
 import { LinkTitleSuggest } from './ui/LinkTitleSuggest';
@@ -28,19 +28,40 @@ export default class PropertyOverFileNamePlugin extends Plugin {
   private windowFrameService!: WindowFrameService;
   private bookmarkService!: BookmarkService;
 
+  constructor(app: App, manifest: any) {
+    super(app, manifest);
+
+    // Register MDX extension as early as possible
+    try {
+      this.registerExtensions(['mdx'], 'markdown');
+    } catch (error) {
+      // MDX extension already registered by another plugin is normal
+      const errorMsg = (error as Error).message;
+      if (!errorMsg.includes('existing file extension')) {
+        console.error('[POV] Unexpected MDX registration error in constructor:', errorMsg);
+      }
+    }
+  }
+
   async onload() {
     await this.loadSettings();
-    
+
     // register the view and extensions
     if (this.settings.enableMdxSupport) {
       try {
-        console.log('Registering MDX extension...');
         this.registerExtensions(['mdx'], 'markdown');
-        console.log('MDX extension registered successfully');
       } catch (error) {
-        console.error('Failed to register MDX extension:', error);
-        // Disable MDX support if registration fails
-        this.settings.enableMdxSupport = false;
+        const errorMsg = (error as Error).message;
+        if (!errorMsg.includes('existing file extension')) {
+          console.error('Unexpected MDX registration error:', errorMsg);
+          this.settings.enableMdxSupport = false;
+        }
+      }
+
+      // Force metadata cache refresh for MDX files to ensure they're recognized
+      const mdxFiles = this.app.vault.getFiles().filter(f => f.extension === 'mdx');
+      for (const file of mdxFiles) {
+        this.app.metadataCache.trigger('changed', file);
       }
     }
     
@@ -319,5 +340,7 @@ export default class PropertyOverFileNamePlugin extends Plugin {
       void this.tabService.registerEvents();
       this.updateTabs();
     }
+    // Always update graph view since graph view and MDX settings can change
+    this.updateGraphView();
   }
 }

@@ -138,8 +138,7 @@ export class SettingTab extends PluginSettingTab {
             .setValue(this.plugin.settings.enableForGraphView)
             .onChange(async (value) => {
               this.plugin.settings.enableForGraphView = value;
-              await this.plugin.saveData(this.plugin.settings);
-              this.plugin.updateGraphView();
+              await this.plugin.saveSettings();
             })
         );
     });
@@ -251,7 +250,7 @@ export class SettingTab extends PluginSettingTab {
             .setValue(this.plugin.settings.enableMdxSupport)
             .onChange(async (value) => {
               this.plugin.settings.enableMdxSupport = value;
-              await this.plugin.saveData(this.plugin.settings);
+              await this.plugin.saveSettings();
               // Rebuild cache and refresh all components when MDX support is toggled
               this.plugin.rebuildCache();
               this.plugin.updateLinkSuggester();

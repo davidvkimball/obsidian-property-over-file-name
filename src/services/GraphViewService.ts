@@ -29,33 +29,35 @@ function createGetDisplayText(app: App) {
 
 		// Try to get property value - exactly like Node Masquerade logic but for properties
 		const file = app.vault.getFileByPath(this.id);
+
 		if (file) {
-			// For MD files, use metadata cache directly (fast sync access)
-			if (file.extension === 'md') {
-				const fileCache = app.metadataCache.getFileCache(file);
-				const mdFrontmatter = fileCache?.frontmatter;
-				if (mdFrontmatter && mdFrontmatter[graphDisplaySettings.propertyKey] !== undefined && mdFrontmatter[graphDisplaySettings.propertyKey] !== null) {
-					const propertyValue = String(mdFrontmatter[graphDisplaySettings.propertyKey]).trim();
-					if (propertyValue !== '') {
-						return propertyValue;
+			// For both MD and MDX files, try frontmatter parsing
+			if ((file.extension === 'md' || (file.extension === 'mdx' && graphDisplaySettings.enableMdxSupport))) {
+				if (file.extension === 'md') {
+					// For MD files, use metadata cache directly (fast sync access)
+					const fileCache = app.metadataCache.getFileCache(file);
+					const mdFrontmatter = fileCache?.frontmatter;
+
+					if (mdFrontmatter && mdFrontmatter[graphDisplaySettings.propertyKey] !== undefined && mdFrontmatter[graphDisplaySettings.propertyKey] !== null) {
+						const propertyValue = String(mdFrontmatter[graphDisplaySettings.propertyKey]).trim();
+						if (propertyValue !== '') {
+							return propertyValue;
+						}
 					}
-				}
-			}
+				} else if (file.extension === 'mdx') {
+					// For MDX files, check cache first, then trigger async population if needed
+					const cached = frontmatterCache.getSync(file.path);
 
-			// For MDX files, use cache (populated async, but accessed sync)
-			if (file.extension === 'mdx' && graphDisplaySettings.enableMdxSupport) {
-				// Trigger async read to populate cache if not already cached (fire and forget)
-				const cached = frontmatterCache.getSync(file.path);
-				if (!cached) {
-					void frontmatterCache.get(app, file, { enableMdxSupport: graphDisplaySettings.enableMdxSupport, propertyKey: graphDisplaySettings.propertyKey } as any);
-				}
-
-				// Try to get from cache
-				const frontmatter = frontmatterCache.getSync(file.path);
-				if (frontmatter && frontmatter[graphDisplaySettings.propertyKey] !== undefined && frontmatter[graphDisplaySettings.propertyKey] !== null) {
-					const propertyValue = String(frontmatter[graphDisplaySettings.propertyKey]).trim();
-					if (propertyValue !== '') {
-						return propertyValue;
+					if (cached !== undefined) {
+						if (cached && cached[graphDisplaySettings.propertyKey] !== undefined && cached[graphDisplaySettings.propertyKey] !== null) {
+							const propertyValue = String(cached[graphDisplaySettings.propertyKey]).trim();
+							if (propertyValue !== '') {
+								return propertyValue;
+							}
+						}
+					} else {
+						// Trigger async load in background
+						void frontmatterCache.get(app, file, { enableMdxSupport: graphDisplaySettings.enableMdxSupport, propertyKey: graphDisplaySettings.propertyKey } as any);
 					}
 				}
 			}
@@ -130,38 +132,45 @@ export class GraphViewService {
     return [...new Set(leaves)];
   }
 
-  private overridePrototypes() {
+  private async overridePrototypes() {
     const leaves = this.getGraphLeaves();
     for (const leaf of leaves) {
       if (!(leaf.view instanceof View) || leaf.isDeferred) continue;
       const view = leaf.view as unknown as GraphView | LocalGraphView;
-      this.overridePrototype(view);
+      await this.overridePrototype(view);
     }
   }
 
-  private overridePrototype(view: GraphView | LocalGraphView) {
+  private async overridePrototype(view: GraphView | LocalGraphView) {
     // Check if graph view has nodes loaded yet
     let nodeCount = 0;
     for (const graphNode of view.renderer.nodes) {
       nodeCount++;
-      if (nodeCount > 0) break; // Just check if there's at least one
     }
 
     if (nodeCount === 0) {
       // Graph view is empty, try again in 1 second
       setTimeout(() => {
-        this.overridePrototype(view);
+        void this.overridePrototype(view);
       }, 1000);
       return;
     }
 
     // Pre-populate cache for MDX files in the graph
     if (graphDisplaySettings?.enableMdxSupport) {
+      const mdxPromises: Promise<void>[] = [];
+
       for (const graphNode of view.renderer.nodes) {
         const file = graphDisplaySettings.app.vault.getFileByPath(graphNode.id);
         if (file && file.extension === 'mdx') {
-          void frontmatterCache.get(graphDisplaySettings.app, file, { enableMdxSupport: graphDisplaySettings.enableMdxSupport, propertyKey: graphDisplaySettings.propertyKey } as any);
+          const promise = frontmatterCache.get(graphDisplaySettings.app, file, { enableMdxSupport: graphDisplaySettings.enableMdxSupport, propertyKey: graphDisplaySettings.propertyKey } as any);
+          mdxPromises.push(promise.then(() => {}));
         }
+      }
+
+      // Wait for all MDX cache population to complete
+      if (mdxPromises.length > 0) {
+        await Promise.all(mdxPromises);
       }
     }
 
@@ -172,9 +181,11 @@ export class GraphViewService {
       if (!proto.hasOwnProperty('pov_originalGetDisplayText') && !this.modifiedPrototypes.contains(proto)) {
         proto.pov_originalGetDisplayText = proto.getDisplayText;
         proto.getDisplayText = createGetDisplayText(this.plugin.app);
+        let updatedCount = 0;
         for (const node of view.renderer.nodes) {
           if (node.text) {
             node.text.text = node.getDisplayText();
+            updatedCount++;
           }
         }
         view.renderer.changed();
@@ -217,7 +228,7 @@ export class GraphViewService {
     const isGraphLoaded = appInternal.internalPlugins.getPluginById("graph")?._loaded;
     if (!isGraphLoaded) return;
 
-    this.overridePrototypes();
+    void this.overridePrototypes();
   }
 
 
@@ -230,7 +241,7 @@ export class GraphViewService {
     }
 
     if (this.plugin.settings.enableForGraphView) {
-      this.overridePrototypes();
+      void this.overridePrototypes();
     } else {
       this.restorePrototypes();
     }

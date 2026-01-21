@@ -534,4 +534,31 @@ proto.getDisplayText = createGetDisplayText(this.app, this.settings.propertyKey)
 
 **Timing Issue**: Graph views render nodes before prototype override completes. Solution: Check for nodes, retry if empty, update all existing nodes immediately after override.
 
+### MDX File Support in Graph Views
+
+**Critical Limitation**: MDX files cannot be fully integrated into Obsidian's graph system through plugin extension registration.
+
+**What Works**:
+- MDX files can display property-based titles in graph view ✅
+- MDX extension registration allows property parsing ✅
+- Global graph view may show MDX nodes ✅
+
+**What Doesn't Work**:
+- MDX files do NOT appear in local graph views ❌
+- MDX files are treated as attachments in global graph view ❌
+- MDX files cannot show connection links in graph views ❌
+
+**Root Cause**: Obsidian builds graph data structures during startup, before plugins load. MDX files are not recognized as content nodes during this phase.
+
+**Workarounds**:
+1. Use `.md` files for content that needs graph connectivity
+2. Accept that MDX files will only show titles in graph view
+3. Consider MDX files as "attachment-like" content that doesn't participate in graph links
+
+**Implementation Notes**:
+- Register MDX extension early (constructor + onload)
+- Use async frontmatter caching for sync graph access
+- Force metadata cache refresh when MDX support is enabled
+- MDX nodes will appear in global graph but lack connection visualization
+
 
