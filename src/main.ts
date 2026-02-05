@@ -1,4 +1,4 @@
-import { Plugin, TFile, App } from 'obsidian';
+import { Plugin, TFile, App, PluginManifest } from 'obsidian';
 import { PluginSettings, WorkspaceInternal, EditorSuggest } from './types';
 import { DEFAULT_SETTINGS } from './settings';
 import { LinkTitleSuggest } from './ui/LinkTitleSuggest';
@@ -28,7 +28,7 @@ export default class PropertyOverFileNamePlugin extends Plugin {
   private windowFrameService!: WindowFrameService;
   private bookmarkService!: BookmarkService;
 
-  constructor(app: App, manifest: any) {
+  constructor(app: App, manifest: PluginManifest) {
     super(app, manifest);
 
     // Register MDX extension as early as possible
@@ -64,7 +64,7 @@ export default class PropertyOverFileNamePlugin extends Plugin {
         this.app.metadataCache.trigger('changed', file);
       }
     }
-    
+
     // Initialize services
     this.quickSwitcherService = new QuickSwitcherService(this);
     this.dragDropService = new DragDropService(this);
@@ -75,17 +75,17 @@ export default class PropertyOverFileNamePlugin extends Plugin {
     this.explorerService = new ExplorerService(this);
     this.windowFrameService = new WindowFrameService(this);
     this.bookmarkService = new BookmarkService(this);
-    
+
     // Register tab service events and rename tabs immediately
     this.tabService.registerEvents();
-    
+
     // Register explorer and window frame services
     this.explorerService.registerEvents();
     this.windowFrameService.registerEvents();
-    
+
     // Initialize bookmarks service
     this.bookmarkService.updateBookmarks();
-    
+
     // Pre-populate frontmatter cache for MDX files if enabled
     if (this.settings.enableMdxSupport) {
       (() => {
@@ -133,15 +133,7 @@ export default class PropertyOverFileNamePlugin extends Plugin {
       })
     );
 
-    // Periodic check for graph views - needed because layout-change fires before nodes are ready
-    this.registerInterval(window.setInterval(() => {
-      if (this.settings.enableForGraphView) {
-        const leaves = this.app.workspace.getLeavesOfType('graph').concat(this.app.workspace.getLeavesOfType('localgraph'));
-        if (leaves.length > 0) {
-          this.graphViewService.onLayoutChange();
-        }
-      }
-    }, 1000)); // Check every second
+    // Layout changes are now handled primarily via MutationObserver in GraphViewService
 
     // Set up backlinks handling
     this.registerEvent(

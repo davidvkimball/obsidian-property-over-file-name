@@ -32,7 +32,7 @@ Property Over File Name is not yet available in the Community plugins section. I
 ### Manual
 
 1. Download the latest release from the [Releases page](https://github.com/davidvkimball/obsidian-property-over-file-name/releases) and navigate to your Obsidian vault's `.obsidian/plugins/` directory.
-2. Create a new folder called `alias-file-name-history` and ensure `manifest.json` and `main.js` are in there.
+2. Create a new folder called `property-over-file-name` and ensure `manifest.json` and `main.js` are in there.
 3. In Obsidian, go to Settings > Community plugins (enable it if you haven't already) and then enable "Property Over File Name."
 
 ## Usage

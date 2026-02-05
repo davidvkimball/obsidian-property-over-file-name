@@ -112,6 +112,8 @@ interface GraphNodeCollectionWithFirst extends GraphNodeCollection {
 export class GraphViewService {
   private plugin: PropertyOverFileNamePlugin;
   private modifiedPrototypes: GraphNodePrototype[] = [];
+  private observer: MutationObserver | null = null;
+  private timer: number | null = null;
 
   constructor(plugin: PropertyOverFileNamePlugin) {
     this.plugin = plugin;
@@ -218,6 +220,8 @@ export class GraphViewService {
   }
 
   onLayoutChange() {
+    this.cleanupObserver();
+
     if (!this.plugin.settings.enableForGraphView) {
       this.restorePrototypes();
       return;
@@ -228,7 +232,50 @@ export class GraphViewService {
     const isGraphLoaded = appInternal.internalPlugins.getPluginById("graph")?._loaded;
     if (!isGraphLoaded) return;
 
+    // Use MutationObserver for a more efficient way to detect when nodes are added
+    this.setupObserver();
+    
+    // Also trigger initial override
     void this.overridePrototypes();
+  }
+
+  private setupObserver() {
+    // Look for graph containers in all leaves
+    const leaves = this.getGraphLeaves();
+    for (const leaf of leaves) {
+      const container = leaf.view.containerEl;
+      if (!container) continue;
+
+      if (!this.observer) {
+        this.observer = new MutationObserver(() => {
+          // Debounce updates to avoid excessive processing
+          if (this.timer) window.clearTimeout(this.timer);
+          this.timer = window.setTimeout(() => {
+            void this.overridePrototypes();
+          }, 500);
+        });
+      }
+
+      // Observe the container for additions of graph-related elements
+      this.observer.observe(container, {
+        childList: true,
+        subtree: true
+      });
+    }
+
+    // Fallback: if no observer could be set up, or as an extra safety measure,
+    // we could keep a very infrequent interval, but the requirement is to replace it.
+  }
+
+  private cleanupObserver() {
+    if (this.observer) {
+      this.observer.disconnect();
+      this.observer = null;
+    }
+    if (this.timer) {
+      window.clearTimeout(this.timer);
+      this.timer = null;
+    }
   }
 
 
@@ -254,6 +301,7 @@ export class GraphViewService {
   }
 
   onunload() {
+    this.cleanupObserver();
     this.restorePrototypes();
   }
 }

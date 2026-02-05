@@ -29,14 +29,14 @@ export class BacklinkService {
     }
 
     const { getFrontmatter, isFileTypeSupported } = await import('../utils/frontmatter');
-    
+
     // Skip unsupported file types
     if (!isFileTypeSupported(file.extension, this.plugin.settings)) {
       return null;
     }
 
     const frontmatter = await getFrontmatter(this.plugin.app, file, this.plugin.settings);
-    
+
     if (frontmatter && frontmatter[this.plugin.settings.propertyKey] !== undefined && frontmatter[this.plugin.settings.propertyKey] !== null) {
       const propertyValue = String(frontmatter[this.plugin.settings.propertyKey]).trim();
       if (propertyValue !== '') {
@@ -58,7 +58,7 @@ export class BacklinkService {
 
     // Update embedded backlinks in all markdown views
     this.updateEmbeddedBacklinks();
-    
+
     // Update dedicated backlinks panel
     void this.updateDedicatedBacklinksPanel();
 
@@ -87,10 +87,10 @@ export class BacklinkService {
    */
   private async updateDedicatedBacklinksPanel(): Promise<void> {
     const backlinksLeaves = this.plugin.app.workspace.getLeavesOfType('backlink');
-    
+
     for (const leaf of backlinksLeaves) {
       await leaf.loadIfDeferred();
-      
+
       if (leaf.view) {
         const container = (leaf.view as { containerEl?: HTMLElement }).containerEl;
         if (container) {
@@ -99,7 +99,7 @@ export class BacklinkService {
           if (backlinksContainer) {
             this.updateBacklinkContainer(backlinksContainer as HTMLElement);
           }
-          
+
           // Also check for outgoing links
           const outgoingLinksContainer = container.querySelector('.outgoing-link-pane') || container.querySelector('.outgoing-links');
           if (outgoingLinksContainer) {
@@ -144,7 +144,7 @@ export class BacklinkService {
             // Ignore URL parsing errors
           }
         }
-        
+
         // Try internal link format (e.g., #file/path/to/file)
         const internalLinkMatch = href.match(/#file\/(.+)/);
         if (internalLinkMatch) {
@@ -230,64 +230,64 @@ export class BacklinkService {
   private updateElementWithFile(element: HTMLElement, file: TFile): void {
     void (async () => {
       const displayName = await this.getDisplayName(file);
-      
+
       if (displayName === null) {
         // No property, use default behavior (file name)
         return;
       }
 
-    // Mark as processed
-    this.processedElements.add(element);
-    element.setAttribute('data-pov-processed', 'true');
+      // Mark as processed
+      this.processedElements.add(element);
+      element.setAttribute('data-pov-processed', 'true');
 
-    // Find the text node or element that contains the file name
-    const currentText = element.textContent?.trim() || '';
-    const basename = file.basename;
+      // Find the text node or element that contains the file name
+      const currentText = element.textContent?.trim() || '';
+      const basename = file.basename;
 
-    // Only update if the current text matches the basename or file name
-    // This prevents overwriting custom text that might already be set
-    if (currentText === basename || currentText === file.name || currentText.endsWith(basename)) {
-      // Find the link element (if any)
-      const link = element.closest('a') || element.querySelector('a');
-      const targetElement = link || element;
+      // Only update if the current text matches the basename or file name
+      // This prevents overwriting custom text that might already be set
+      if (currentText === basename || currentText === file.name || currentText.endsWith(basename)) {
+        // Find the link element (if any)
+        const link = element.closest('a') || element.querySelector('a');
+        const targetElement = link || element;
 
-      // Try to preserve the structure while updating text
-      // Look for text nodes or elements that contain the file name
-      const updateTextInElement = (el: HTMLElement) => {
-        // Check if element has a single text node child
-        if (el.childNodes.length === 1 && el.childNodes[0].nodeType === Node.TEXT_NODE) {
-          el.textContent = displayName;
-          return true;
-        }
-
-        // Look for text nodes
-        const textNodes = Array.from(el.childNodes).filter(node => node.nodeType === Node.TEXT_NODE);
-        if (textNodes.length > 0) {
-          // Update the first text node
-          textNodes[0].textContent = displayName;
-          // Remove other text nodes to avoid duplication
-          for (let i = 1; i < textNodes.length; i++) {
-            textNodes[i].remove();
+        // Try to preserve the structure while updating text
+        // Look for text nodes or elements that contain the file name
+        const updateTextInElement = (el: HTMLElement) => {
+          // Check if element has a single text node child
+          if (el.childNodes.length === 1 && el.childNodes[0].nodeType === Node.TEXT_NODE) {
+            el.textContent = displayName;
+            return true;
           }
-          return true;
+
+          // Look for text nodes
+          const textNodes = Array.from(el.childNodes).filter(node => node.nodeType === Node.TEXT_NODE);
+          if (textNodes.length > 0) {
+            // Update the first text node
+            textNodes[0].textContent = displayName;
+            // Remove other text nodes to avoid duplication
+            for (let i = 1; i < textNodes.length; i++) {
+              textNodes[i].remove();
+            }
+            return true;
+          }
+
+          // If no text nodes, check if we should replace all content
+          // Only do this if the element's text matches the file name
+          if (el.textContent?.trim() === basename || el.textContent?.trim() === file.name) {
+            el.textContent = displayName;
+            return true;
+          }
+
+          return false;
+        };
+
+        // Try to update the link first, then fall back to element
+        if (!updateTextInElement(targetElement)) {
+          // If link update failed, try the element itself
+          updateTextInElement(element);
         }
-
-        // If no text nodes, check if we should replace all content
-        // Only do this if the element's text matches the file name
-        if (el.textContent?.trim() === basename || el.textContent?.trim() === file.name) {
-          el.textContent = displayName;
-          return true;
-        }
-
-        return false;
-      };
-
-      // Try to update the link first, then fall back to element
-      if (!updateTextInElement(targetElement)) {
-        // If link update failed, try the element itself
-        updateTextInElement(element);
       }
-    }
     })();
   }
 
@@ -316,7 +316,7 @@ export class BacklinkService {
             if (node instanceof HTMLElement) {
               const embeddedBacklinks = node.closest('.embedded-backlinks');
               const backlinksPanel = node.closest('.backlinks-pane, .backlink-pane, .outgoing-link-pane, .outgoing-links, .backlink-container');
-              
+
               if (embeddedBacklinks || backlinksPanel) {
                 shouldUpdate = true;
                 // Find potential backlink elements in the new node
@@ -338,12 +338,12 @@ export class BacklinkService {
           }
         } else if (mutation.type === 'characterData') {
           const target = mutation.target;
-          
+
           // Check if mutation is in a backlink container
           if (target instanceof HTMLElement) {
             const embeddedBacklinks = target.closest('.embedded-backlinks');
             const backlinksPanel = target.closest('.backlinks-pane, .backlink-pane, .outgoing-link-pane, .outgoing-links, .backlink-container');
-            
+
             if (embeddedBacklinks || backlinksPanel) {
               shouldUpdate = true;
             }
@@ -351,7 +351,7 @@ export class BacklinkService {
             // Check parent element
             const embeddedBacklinks = target.parentElement.closest('.embedded-backlinks');
             const backlinksPanel = target.parentElement.closest('.backlinks-pane, .backlink-pane, .outgoing-link-pane, .outgoing-links, .backlink-container');
-            
+
             if (embeddedBacklinks || backlinksPanel) {
               shouldUpdate = true;
             }
@@ -383,7 +383,7 @@ export class BacklinkService {
       if (shouldUpdate) {
         // Clear processed elements cache when updating
         this.processedElements = new WeakSet();
-        
+
         // Debounce updates to avoid excessive processing
         if (updateTimeout) {
           clearTimeout(updateTimeout);
@@ -454,10 +454,10 @@ export class BacklinkService {
     // Store original textContent descriptor if it exists
     const proto = Object.getPrototypeOf(element) as { textContent?: PropertyDescriptor };
     const originalDescriptor = Object.getOwnPropertyDescriptor(proto, 'textContent');
-    
+
     if (originalDescriptor && originalDescriptor.set) {
       this.originalTextContentDescriptors.set(element, originalDescriptor);
-      
+
       // Override textContent setter
       try {
         Object.defineProperty(element, 'textContent', {
@@ -486,7 +486,7 @@ export class BacklinkService {
             // Mark as processed
             element.setAttribute('data-pov-processed', 'true');
           },
-          // eslint-disable-next-line @typescript-eslint/unbound-method
+          // eslint-disable-next-line @typescript-eslint/unbound-method -- accessing property descriptor original setter
           get: originalDescriptor.get || (() => {
             // Fallback: access the native textContent property directly
             return Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'textContent')?.get?.call(element) as string || '';
@@ -547,7 +547,7 @@ export class BacklinkService {
    */
   onunload(): void {
     this.stopObserving();
-    
+
     // Restore original textContent descriptors
     this.originalTextContentDescriptors.forEach((descriptor, element) => {
       try {

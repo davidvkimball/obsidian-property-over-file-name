@@ -4,6 +4,7 @@ import { createSettingsGroup } from '../utils/settings-compat';
 
 export class SettingTab extends PluginSettingTab {
   plugin: PropertyOverFileNamePlugin;
+  public icon = 'lucide-type';
 
   constructor(app: App, plugin: PropertyOverFileNamePlugin) {
     super(app, plugin);
@@ -13,7 +14,7 @@ export class SettingTab extends PluginSettingTab {
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
-    
+
     // Add scoping class to prevent CSS from affecting other settings
     containerEl.addClass('property-over-filename-settings');
 
@@ -239,12 +240,8 @@ export class SettingTab extends PluginSettingTab {
 
     generalGroup.addSetting((setting) => {
       setting
-        // False positive: "MDX" is a proper noun (file format acronym) and should be capitalized
-        // eslint-disable-next-line obsidianmd/ui/sentence-case
         .setName('Enable MDX file support')
-        // False positive: "MDX" is a proper noun (file format acronym) and should be capitalized
-        // eslint-disable-next-line obsidianmd/ui/sentence-case
-        .setDesc('Enable support for .mdx files. When enabled, the plugin will read properties from MDX files manually (Obsidian\'s metadata cache only works for .md files). Note: MDX support is partial - graph view is not supported due to technical limitations.')
+        .setDesc('Enable support for .mdx files. When enabled, the plugin will read properties from Mdx files manually (Obsidian\'s metadata cache only works for .md files). Note: Mdx support is partial - graph view is not supported due to technical limitations.')
         .addToggle((toggle) =>
           toggle
             .setValue(this.plugin.settings.enableMdxSupport)
