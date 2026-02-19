@@ -5,14 +5,14 @@ Search, display, and insert notes using a specified note property instead of the
 ![property-over-file-name-preview](https://github.com/user-attachments/assets/60073f96-4855-47d0-88f5-b80fd03b4429)
 
 
-Particularly helpful when used in conjunction wth [Astro Composer](https://github.com/davidvkimball/obsidian-astro-composer) Obsidian plugin.
+Particularly helpful when used in conjunction with [Astro Composer](https://github.com/davidvkimball/obsidian-astro-composer) Obsidian plugin.
 
 ## Made for Vault CMS
 
 Part of the [Vault CMS](https://github.com/davidvkimball/vault-cms) project.
 
 ## Features
-- Displays property (like `title`) in link suggester, quick switcher, graph view, tab titles, backlinks, window frame, and file explorer.
+- Displays property (like `title`) in link suggester, quick switcher, graph view, tab titles, backlinks, bookmarks, window frame, and file explorer.
 - Supports creating new notes via link suggester and quick switcher.
 - Configurable to include file names and aliases in fuzzy searches.
 - Simple search toggle for larger vaults.
@@ -45,11 +45,14 @@ Property Over File Name is not yet available in the Community plugins section. I
   - **In tab titles**: Enable/disable property-based titles in tab headers.
   - **In graph view**: Enable/disable property-based titles in graph view.
   - **In backlinks**: Enable/disable property-based titles in backlinks panel.
+  - **In bookmarks**: Enable/disable property-based titles in bookmarks.
   - **In window frame**: Enable/disable property-based titles in window title bar.
   - **In file explorer**: Enable/disable property-based titles in file explorer.
+  - **Drag-and-drop**: Enable/disable property-based titles when dragging notes from file explorer.
   - **Include file name in fuzzy searches**: Include note file names in search results.
   - **Include aliases in fuzzy searches**: Include `aliases` property in search results.
   - **Use simple search**: Toggle simple search mode for larger vaults.
+  - **Enable MDX support**: Enable property display for `.mdx` files.
   - **Folder note filename**: Specify filename pattern for folder notes.
 
 ### Example Note
