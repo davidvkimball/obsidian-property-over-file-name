@@ -16,15 +16,17 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   enableForWindowFrame: true,
   enableForBookmarks: true,
   enableMdxSupport: false,
+  quickSwitcherExcludedBehavior: 'deemphasize',
+  linkSuggesterExcludedBehavior: 'deemphasize',
 };
 
 export function validateSettings(settings: PluginSettings): { isValid: boolean; errors: string[] } {
   const errors: string[] = [];
-  
+
   if (!settings.propertyKey || settings.propertyKey.trim() === '') {
     errors.push('Property key cannot be empty');
   }
-  
+
   return {
     isValid: errors.length === 0,
     errors

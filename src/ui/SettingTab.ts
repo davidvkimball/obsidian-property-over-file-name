@@ -240,6 +240,46 @@ export class SettingTab extends PluginSettingTab {
 
     generalGroup.addSetting((setting) => {
       setting
+        .setName('Excluded files in quick switcher')
+        .setDesc('How files in Obsidian\'s "Excluded files" list should behave in the quick switcher.')
+        .addDropdown((dropdown) =>
+          dropdown
+            .addOptions({
+              deemphasize: 'Deemphasize (move to bottom & gray out)',
+              hide: 'Hide entirely',
+              ignore: 'Ignore (treat as normal files)',
+            })
+            .setValue(this.plugin.settings.quickSwitcherExcludedBehavior)
+            .onChange(async (value) => {
+              this.plugin.settings.quickSwitcherExcludedBehavior = value as any;
+              await this.plugin.saveData(this.plugin.settings);
+              this.plugin.updateQuickSwitcher();
+            })
+        );
+    });
+
+    generalGroup.addSetting((setting) => {
+      setting
+        .setName('Excluded files in link suggester')
+        .setDesc('How files in Obsidian\'s "Excluded files" list should behave in the link suggester.')
+        .addDropdown((dropdown) =>
+          dropdown
+            .addOptions({
+              deemphasize: 'Deemphasize (move to bottom & gray out)',
+              hide: 'Hide entirely',
+              ignore: 'Ignore (treat as normal files)',
+            })
+            .setValue(this.plugin.settings.linkSuggesterExcludedBehavior)
+            .onChange(async (value) => {
+              this.plugin.settings.linkSuggesterExcludedBehavior = value as any;
+              await this.plugin.saveData(this.plugin.settings);
+              this.plugin.updateLinkSuggester();
+            })
+        );
+    });
+
+    generalGroup.addSetting((setting) => {
+      setting
         .setName('Enable MDX file support')
         .setDesc('Enable support for .mdx files. When enabled, the plugin will read properties from Mdx files manually (Obsidian\'s metadata cache only works for .md files). Note: Mdx support is partial - graph view is not supported due to technical limitations.')
         .addToggle((toggle) =>

@@ -18,33 +18,33 @@ export function getMatchScore(display: string, query: string, basename: string, 
   const lowerDisplay = display.toLowerCase();
   const lowerBasename = basename.toLowerCase();
   const lowerQuery = query.toLowerCase();
-  
+
   // Exact matches get highest score
   if (lowerDisplay === lowerQuery) score += 1000;
   else if (lowerBasename === lowerQuery) score += 900;
-  
+
   // Starts with query gets high score
   else if (lowerDisplay.startsWith(lowerQuery)) score += 100;
   else if (includeFilenameInSearch && lowerBasename.startsWith(lowerQuery)) score += 80;
-  
+
   // Contains query gets medium score
   else if (lowerDisplay.includes(lowerQuery)) score += 50;
   else if (includeFilenameInSearch && lowerBasename.includes(lowerQuery)) score += 30;
-  
+
   // Word boundary matches get bonus
   const wordBoundaryRegex = new RegExp(`\\b${lowerQuery}`, 'i');
   if (wordBoundaryRegex.test(lowerDisplay)) score += 20;
   if (includeFilenameInSearch && wordBoundaryRegex.test(lowerBasename)) score += 15;
-  
+
   // Penalty for very long names
   const lengthPenalty = Math.max(0, (display.length - query.length) * 0.1);
   score -= lengthPenalty;
-  
+
   return Math.max(0, score);
 }
 
 export async function buildFileCache(
-  files: TFile[], 
+  files: TFile[],
   metadataCache: MetadataCache,
   app: App,
   propertyKey: string,
@@ -52,7 +52,7 @@ export async function buildFileCache(
 ): Promise<Map<string, CachedFileData>> {
   const cache = new Map<string, CachedFileData>();
   const { getFrontmatter } = await import('./frontmatter');
-  
+
   // Process files in parallel for better performance
   await Promise.all(files.map(async (file) => {
     // Skip unsupported file types
@@ -106,6 +106,43 @@ export async function buildFileCache(
       isCustomDisplay
     });
   }));
-  
+
   return cache;
+}
+
+export function isExcluded(file: TFile, app: App): boolean {
+  const metadataCache = app.metadataCache as any;
+
+  // 1. Try the official-ish but internal API
+  if (typeof metadataCache.isExcludedFile === 'function') {
+    try {
+      // Some versions expect TFile, some expect path string
+      if (metadataCache.isExcludedFile(file)) return true;
+      if (metadataCache.isExcludedFile(file.path)) return true;
+    } catch (e) {
+      // Ignore errors and move to fallback
+    }
+  }
+
+  // 2. Manual fallback using userIgnoreFilters
+  try {
+    const filters = (app.vault as any).getConfig('userIgnoreFilters');
+    if (Array.isArray(filters)) {
+      const path = file.path;
+      for (const filter of filters) {
+        if (!filter) continue;
+        // Folder filters often end with /
+        if (filter.endsWith('/')) {
+          if (path.startsWith(filter)) return true;
+        } else {
+          // Exact match or matches a parent folder
+          if (path === filter || path.startsWith(filter + '/')) return true;
+        }
+      }
+    }
+  } catch (e) {
+    // Ignore errors
+  }
+
+  return false;
 }

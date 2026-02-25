@@ -1,6 +1,6 @@
 import { App, FuzzySuggestModal, MarkdownView, Notice, TFile, prepareFuzzySearch, prepareSimpleSearch, FuzzyMatch, sortSearchResults, SearchResult } from 'obsidian';
-import { QuickSwitchItem, CachedFileData, SearchMatchReason, PropertyOverFileNamePlugin, WorkspaceInternal, QuickSwitcherPluginInstance, UnresolvedLinkItem, NewNoteItem, AppInternal } from '../types';
-import { buildFileCache } from '../utils/search';
+import { QuickSwitchItem, CachedFileData, SearchMatchReason, PropertyOverFileNamePlugin, WorkspaceInternal, QuickSwitcherPluginInstance, UnresolvedLinkItem, NewNoteItem, AppInternal, MetadataCacheInternal } from '../types';
+import { buildFileCache, isExcluded } from '../utils/search';
 import { getFrontmatterSync } from '../utils/frontmatter';
 
 export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']> {
@@ -14,19 +14,19 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
     super(app);
     this.plugin = plugin;
     this.limit = 8; // Limit to 8 items for comfortable display
-    
+
     // Set placeholder based on setting
     if (this.plugin.settings.enableForQuickSwitcher) {
       this.setPlaceholder('Type to search notes by title or file name...');
     } else {
       this.setPlaceholder('Type to search files...');
     }
-    
+
     void this.buildFileCache();
     this.updateRecentFiles();
     this.addKeyboardNavigation();
     this.addFooter();
-    
+
     // Only add scoping class when enabled
     if (this.plugin.settings.enableForQuickSwitcher) {
       this.containerEl.addClass('property-over-filename-modal');
@@ -58,7 +58,7 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
         { command: 'shift ↵', action: 'to create' },
         { command: 'esc', action: 'to dismiss' }
       ];
-      
+
       instructions.forEach(({ command, action }) => {
         const instruction = footer.createDiv({ cls: 'prompt-instruction' });
         instruction.createSpan({ cls: 'prompt-instruction-command', text: command });
@@ -80,7 +80,7 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
 
   private async updateFileCache(file: TFile): Promise<void> {
     const { getFrontmatter, isFileTypeSupported } = await import('../utils/frontmatter');
-    
+
     // Skip unsupported file types
     if (!isFileTypeSupported(file.extension, this.plugin.settings)) {
       return;
@@ -117,23 +117,23 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
   private updateRecentFiles(): void {
     // Use Obsidian's internal recent files mechanism for perfect compatibility
     let recentFiles: TFile[] = [];
-    
+
     const workspace = this.app.workspace as unknown as WorkspaceInternal & { recentFileTracker?: { getLastOpenFiles(): string[] } };
-    
+
     // Check Quick Switcher settings to determine what file types to include
     const quickSwitcherOptions = this.getQuickSwitcherOptions();
     const showAttachments = quickSwitcherOptions?.showAttachments ?? true;
-    
+
     // Access Obsidian's recentFileTracker to get the same files as default quick switcher
     if (workspace.recentFileTracker?.getLastOpenFiles) {
       const lastOpenFiles = workspace.recentFileTracker.getLastOpenFiles();
-      
+
       // Convert file paths to TFile objects
       recentFiles = lastOpenFiles
         .map((filePath: string) => this.app.vault.getAbstractFileByPath(filePath))
         .filter((file: unknown): file is TFile => file instanceof TFile);
     }
-    
+
     // Fallback if recentFileTracker is not available
     if (recentFiles.length === 0) {
       const openFiles = this.app.workspace.getLeavesOfType('markdown')
@@ -142,23 +142,29 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
         .map(view => view.file)
         .filter((file): file is TFile => file !== null)
         .filter((file, index, self) => self.indexOf(file) === index);
-      
+
       recentFiles = [...openFiles];
     }
-    
+
+    // Filter out excluded files unless behavior is 'ignore'
+    const behavior = this.plugin.settings.quickSwitcherExcludedBehavior;
+    if (behavior !== 'ignore') {
+      recentFiles = recentFiles.filter(file => !isExcluded(file, this.app));
+    }
+
     // Filter based on Quick Switcher settings BEFORE backfilling
     if (!showAttachments) {
       // Filter out attachments - only show markdown files (and MDX if enabled)
-      recentFiles = recentFiles.filter(file => 
-        file.extension === 'md' || 
+      recentFiles = recentFiles.filter(file =>
+        file.extension === 'md' ||
         (file.extension === 'mdx' && this.plugin.settings.enableMdxSupport)
       );
     }
-    
+
     // Always backfill to 8 items (or as many as available)
     const targetCount = 8;
     const existingPaths = new Set(recentFiles.map(f => f.path));
-    
+
     if (recentFiles.length < targetCount) {
       if (showAttachments) {
         // Include all file types (markdown + attachments)
@@ -172,17 +178,19 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
         const allMarkdownFiles = this.app.vault.getMarkdownFiles();
         const mdxFiles = this.plugin.settings.enableMdxSupport
           ? this.app.vault.getFiles().filter(
-              (f): f is TFile => f instanceof TFile && f.extension === 'mdx'
-            )
+            (f): f is TFile => f instanceof TFile && f.extension === 'mdx'
+          )
           : [];
         const allSupportedFiles = [...allMarkdownFiles, ...mdxFiles];
+        const behavior = this.plugin.settings.quickSwitcherExcludedBehavior;
         const additionalFiles = allSupportedFiles
           .filter(file => !existingPaths.has(file.path))
+          .filter(file => behavior === 'ignore' || !isExcluded(file, this.app))
           .slice(0, targetCount - recentFiles.length);
         recentFiles.push(...additionalFiles);
       }
     }
-    
+
     // Limit to 8 files
     this.recentFiles = recentFiles.slice(0, targetCount);
   }
@@ -193,10 +201,10 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
 
   private getFilteredFiles(): TFile[] {
     const quickSwitcherOptions = this.getQuickSwitcherOptions();
-    
+
     // Start with markdown files
     let files = this.app.vault.getMarkdownFiles();
-    
+
     // Add MDX files if MDX support is enabled
     if (this.plugin.settings.enableMdxSupport) {
       const mdxFiles = this.app.vault.getFiles().filter(
@@ -204,14 +212,14 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
       );
       files = [...files, ...mdxFiles];
     }
-    
+
     // If we can access Quick Switcher options and attachments are enabled, include them
     if (quickSwitcherOptions?.showAttachments) {
       const allFiles = this.app.vault.getFiles().filter((file): file is TFile => file instanceof TFile);
       // Include markdown files, MDX files (if enabled), and attachments
-      files = allFiles.filter((file): file is TFile => 
+      files = allFiles.filter((file): file is TFile =>
         file instanceof TFile && (
-          file.extension === 'md' || 
+          file.extension === 'md' ||
           (file.extension === 'mdx' && this.plugin.settings.enableMdxSupport) ||
           this.isAttachment(file)
         )
@@ -232,7 +240,7 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
       // Access the internal Quick Switcher plugin the same way Quick Switch ++ does
       const internalPlugins = (this.app as unknown as AppInternal).internalPlugins;
       if (!internalPlugins) return null;
-      
+
       const switcherPlugin = internalPlugins.getPluginById?.('switcher');
       if (!switcherPlugin || !switcherPlugin.instance) {
         return null;
@@ -248,16 +256,16 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
     if ('isNewNote' in item) {
       return item.newName; // Just return the name, Obsidian will handle the "Enter to create" text
     }
-    
+
     if ('isUnresolved' in item) {
       return item.unresolvedText;
     }
-    
+
     // When disabled, show just the file name like default Obsidian
     if (!this.plugin.settings.enableForQuickSwitcher) {
       return item.basename;
     }
-    
+
     const display = this.getDisplayName(item);
     return display;
   }
@@ -268,10 +276,10 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
     if (cached) {
       return cached.displayName;
     }
-    
+
     // Fallback: use sync version for .md files, or return basename for .mdx (will be cached async)
     const frontmatter = getFrontmatterSync(this.app, file, this.plugin.settings);
-    
+
     if (frontmatter) {
       const propertyValue = frontmatter[this.plugin.settings.propertyKey];
       if (propertyValue !== undefined && propertyValue !== null) {
@@ -281,7 +289,7 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
         }
       }
     }
-    
+
     return file.basename;
   }
 
@@ -289,29 +297,29 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
     if (!this.plugin.settings.enableForQuickSwitcher) {
       // When disabled, use default Obsidian behavior - show all files with default search
       const searchQuery = query.trim();
-      
+
       if (!searchQuery) {
         // Show recent files like default Obsidian
         return this.getRecentFilesResults();
       }
-      
+
       // Use default Obsidian search - just show files with file name matching
       const files = this.getFilteredFiles();
-      const search = this.plugin.settings.useSimpleSearch 
+      const search = this.plugin.settings.useSimpleSearch
         ? prepareSimpleSearch(searchQuery)
         : prepareFuzzySearch(searchQuery);
       const results: FuzzyMatch<QuickSwitchItem['item']>[] = [];
-      
+
       for (const file of files) {
         const match = search(file.basename) ?? { score: 0, matches: [] };
         if (match.matches.length > 0) {
           results.push({ item: file, match });
         }
       }
-      
+
       // Use Obsidian's native sorting for exact vanilla compatibility
       sortSearchResults(results);
-      
+
       // Always add new note option if no results
       // "Show existing only" only affects showing unresolved links, not creating new notes
       if (results.length === 0) {
@@ -321,12 +329,12 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
           match: { score: 1000, matches: [[0, searchQuery.length]] },
         });
       }
-      
+
       return results.slice(0, this.limit);
     }
 
     const searchQuery = query.trim();
-    
+
     // Clear previous timeout
     if (this.searchTimeout) {
       clearTimeout(this.searchTimeout);
@@ -343,10 +351,10 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
   private getRecentFilesResults(): FuzzyMatch<QuickSwitchItem['item']>[] {
     // Update recent files (this already handles filtering and backfilling)
     this.updateRecentFiles();
-    
+
     // Clear match reasons for recent files since they're not search results
     this.matchReasons.clear();
-    
+
     // Return the recent files (already filtered and backfilled in updateRecentFiles)
     return this.recentFiles.map(file => ({
       item: file,
@@ -356,7 +364,7 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
 
   private performSearch(searchQuery: string): FuzzyMatch<QuickSwitchItem['item']>[] {
     // Use simple search for large vaults if enabled, otherwise use fuzzy search
-    const search = this.plugin.settings.useSimpleSearch 
+    const search = this.plugin.settings.useSimpleSearch
       ? prepareSimpleSearch(searchQuery)
       : prepareFuzzySearch(searchQuery);
     const results: FuzzyMatch<QuickSwitchItem['item']>[] = [];
@@ -365,19 +373,19 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
     // Use cached data for much faster search
     for (const cachedData of this.fileCache.values()) {
       const { file, displayName, aliases, isCustomDisplay } = cachedData;
-      
+
       // Track which fields caused the match
       const matchReason: SearchMatchReason = {
         matchedInTitle: false,
         matchedInFilename: false,
         matchedInAlias: false
       };
-      
+
       // Primary match: search title/property first (only if note has custom display)
       let primaryMatch: SearchResult | null = null;
       let bestMatch: SearchResult | null = null;
       let matchType: 'title' | 'filename' | 'alias' | null = null;
-      
+
       if (isCustomDisplay) {
         // Only search title/property if note actually has a custom property
         primaryMatch = search(displayName);
@@ -387,7 +395,7 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
           matchType = 'title';
         }
       }
-      
+
       // If no title match (or note doesn't have property), search filename
       if (!matchType) {
         // Search filename if it's different from displayName, or if note doesn't have property
@@ -409,7 +417,7 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
           }
         }
       }
-      
+
       // Tertiary match: search aliases (with downranking)
       if (!matchType && this.plugin.settings.includeAliasesInSearch && aliases.length > 0) {
         for (const alias of aliases) {
@@ -424,9 +432,17 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
           }
         }
       }
-      
+
       // If we have any match, add to results
       if (bestMatch && bestMatch.matches.length > 0) {
+        // If query is empty, never show excluded files unless behavior is 'ignore'
+        if (!searchQuery) {
+          const behavior = this.plugin.settings.quickSwitcherExcludedBehavior;
+          if (behavior !== 'ignore' && isExcluded(file, this.app)) {
+            continue;
+          }
+        }
+
         results.push({ item: file, match: bestMatch });
         this.matchReasons.set(file.path, matchReason);
       }
@@ -436,18 +452,18 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
     // This matches Quick Switch ++ behavior: unresolved: !settings.showExistingOnly
     const quickSwitcherOptions = this.getQuickSwitcherOptions();
     const showExistingOnly = quickSwitcherOptions?.showExistingOnly ?? false;
-    
+
     if (!showExistingOnly) {
       // Get unresolved links from metadata cache (like Quick Switch ++ does)
       const { unresolvedLinks } = this.app.metadataCache;
       const unresolvedSet = new Set<string>();
-      
+
       // Collect all unresolved links from all files
       for (const sourcePath in unresolvedLinks) {
         const links = Object.keys(unresolvedLinks[sourcePath]);
         links.forEach(link => unresolvedSet.add(link));
       }
-      
+
       // Search unresolved links and add matches
       for (const unresolved of unresolvedSet) {
         const unresolvedMatch = search(unresolved);
@@ -466,12 +482,34 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
     try {
       // Use Obsidian's native sorting for exact vanilla compatibility
       sortSearchResults(results);
-      
+
+      // Post-sort: move excluded files to the end (stable sort)
+      const behavior = this.plugin.settings.quickSwitcherExcludedBehavior;
+      if (behavior !== 'ignore') {
+        results.sort((a, b) => {
+          const aFile = a.item instanceof TFile ? a.item : null;
+          const bFile = b.item instanceof TFile ? b.item : null;
+          const aExcluded = aFile ? isExcluded(aFile, this.app) : false;
+          const bExcluded = bFile ? isExcluded(bFile, this.app) : false;
+
+          if (aExcluded && !bExcluded) return 1;
+          if (!aExcluded && bExcluded) return -1;
+          return 0;
+        });
+      }
+
       // Filter out unresolved links if "Show existing only" is enabled
       // Unresolved links are items with isUnresolved property, but keep "create new note" options
       let filteredResults = results;
+
+      // Filter out excluded files if behavior is 'hide'
+      if (behavior === 'hide') {
+        filteredResults = filteredResults.filter(r => {
+          return !(r.item instanceof TFile && isExcluded(r.item, this.app));
+        });
+      }
       if (showExistingOnly) {
-        filteredResults = results.filter(r => {
+        filteredResults = filteredResults.filter(r => {
           // Keep files and new note items, filter out unresolved links
           return r.item instanceof TFile || ('isNewNote' in r.item && r.item.isNewNote === true);
         });
@@ -479,14 +517,14 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
 
       // Check for exact matches in existing files
       const lowerQuery = searchQuery.toLowerCase();
-      let exactMatch = filteredResults.some(r => 
+      let exactMatch = filteredResults.some(r =>
         r.item instanceof TFile && (
           this.getDisplayName(r.item).toLowerCase() === lowerQuery ||
           (this.plugin.settings.includeFilenameInSearch && r.item.basename.toLowerCase() === lowerQuery) ||
           (this.plugin.settings.includeAliasesInSearch && this.fileCache.get(r.item.path)?.aliases.some(alias => alias.toLowerCase() === lowerQuery))
         )
       );
-      
+
       // Also check unresolved links if they're being shown
       if (!showExistingOnly && !exactMatch) {
         const { unresolvedLinks } = this.app.metadataCache;
@@ -518,7 +556,12 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
 
   renderSuggestion(suggestion: FuzzyMatch<QuickSwitchItem['item']>, el: HTMLElement): void {
     const { item } = suggestion;
-    
+
+    // Check if this item is an excluded file
+    if (item instanceof TFile && this.plugin.settings.quickSwitcherExcludedBehavior === 'deemphasize' && isExcluded(item, this.app)) {
+      el.addClass('mod-excluded');
+    }
+
     // Handle unresolved links - show file-plus icon instead of "Enter to create" text
     if ('isUnresolved' in item && item.isUnresolved) {
       const unresolvedText = item.unresolvedText;
@@ -528,31 +571,31 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
       const suggestionTitle = suggestionContent.createDiv({ cls: 'suggestion-title' });
       suggestionTitle.setText(unresolvedText);
       const suggestionAux = el.createDiv({ cls: 'suggestion-aux' });
-      const suggestionFlair = suggestionAux.createSpan({ 
-        cls: 'suggestion-flair', 
-        attr: { 'aria-label': 'Unresolved link - Enter to create' } 
+      const suggestionFlair = suggestionAux.createSpan({
+        cls: 'suggestion-flair',
+        attr: { 'aria-label': 'Unresolved link - Enter to create' }
       });
       this.createFilePlusIcon(suggestionFlair);
       return;
     }
-    
+
     const text = this.getItemText(item);
-    
+
     if ('isNewNote' in item) {
       // For new notes, use the exact HTML structure from default Obsidian
       el.empty();
       el.addClass('mod-complex');
-      
+
       // Main suggestion content
       const suggestionContent = el.createDiv({ cls: 'suggestion-content' });
       const suggestionTitle = suggestionContent.createDiv({ cls: 'suggestion-title' });
       suggestionTitle.setText(text);
-      
+
       // Add "Enter to create" text on the right using the correct class
       const suggestionAux = el.createDiv({ cls: 'suggestion-aux' });
       const suggestionAction = suggestionAux.createSpan({ cls: 'suggestion-action' });
       suggestionAction.setText('Enter to create');
-      
+
       return;
     }
 
@@ -571,59 +614,59 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
         el.setText(text);
         return;
       }
-      
+
       // Check if this file has a custom property
       const cachedData = this.fileCache.get(item.path);
       const isCustomDisplay = cachedData?.isCustomDisplay ?? false;
       const matchReason = this.matchReasons.get(item.path);
-      
+
       // Special case: notes without property that matched via alias should show alias with icon
       if (!isCustomDisplay && matchReason?.matchedInAlias && matchReason.matchedAliasText) {
         // Show alias as main text, filename below, with alias icon (like default Obsidian)
         el.addClass('mod-complex');
         const suggestionContent = el.createDiv({ cls: 'suggestion-content' });
-        
+
         // Main title - show the alias that matched
         const titleEl = suggestionContent.createDiv({ cls: 'suggestion-title' });
         titleEl.setText(matchReason.matchedAliasText);
-        
+
         // File path below
         const pathEl = suggestionContent.createDiv({ cls: 'suggestion-note' });
         pathEl.setText(item.path.replace('.md', ''));
-        
+
         // Add suggestion-aux with alias icon
         const suggestionAux = el.createDiv({ cls: 'suggestion-aux' });
-        const suggestionFlair = suggestionAux.createSpan({ 
-          cls: 'suggestion-flair', 
-          attr: { 'aria-label': 'Alias Match' } 
+        const suggestionFlair = suggestionAux.createSpan({
+          cls: 'suggestion-flair',
+          attr: { 'aria-label': 'Alias Match' }
         });
         this.createForwardIcon(suggestionFlair);
       } else if (isCustomDisplay) {
         // Notes with the property - keep existing behavior
         const shouldShowIcon = matchReason && (matchReason.matchedInTitle || matchReason.matchedInFilename || matchReason.matchedInAlias);
-        
+
         if (shouldShowIcon) {
           // Add mod-complex class to match Obsidian's structure
           el.addClass('mod-complex');
 
           // Create the main suggestion container
           const suggestionContent = el.createDiv({ cls: 'suggestion-content' });
-          
+
           // Main title
           const titleEl = suggestionContent.createDiv({ cls: 'suggestion-title' });
           titleEl.setText(text);
-          
+
           // File path below
           const pathEl = suggestionContent.createDiv({ cls: 'suggestion-note' });
           pathEl.setText(item.path.replace('.md', ''));
-          
+
           // Add suggestion-aux with appropriate icon based on match reason
           const suggestionAux = el.createDiv({ cls: 'suggestion-aux' });
-          const suggestionFlair = suggestionAux.createSpan({ 
-            cls: 'suggestion-flair', 
-            attr: { 'aria-label': this.getIconLabel(matchReason) } 
+          const suggestionFlair = suggestionAux.createSpan({
+            cls: 'suggestion-flair',
+            attr: { 'aria-label': this.getIconLabel(matchReason) }
           });
-          
+
           // Determine icon based on priority: title > file name > alias
           if (matchReason.matchedInTitle) {
             // Type icon for title/property matches
@@ -644,12 +687,12 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
           titleEl.setText(text);
           const pathEl = suggestionContent.createDiv({ cls: 'suggestion-note' });
           pathEl.setText(item.path.replace('.md', ''));
-          
+
           // Show "T" icon for property-based titles
           const suggestionAux = el.createDiv({ cls: 'suggestion-aux' });
-          const suggestionFlair = suggestionAux.createSpan({ 
-            cls: 'suggestion-flair', 
-            attr: { 'aria-label': 'Property-based title' } 
+          const suggestionFlair = suggestionAux.createSpan({
+            cls: 'suggestion-flair',
+            attr: { 'aria-label': 'Property-based title' }
           });
           this.createTypeIcon(suggestionFlair);
         }
@@ -682,25 +725,25 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
     svg.setAttribute('stroke-linecap', 'round');
     svg.setAttribute('stroke-linejoin', 'round');
     svg.classList.add('svg-icon', 'lucide-type');
-    
+
     const polyline1 = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
     polyline1.setAttribute('points', '4 7 4 4 20 4 20 7');
     svg.appendChild(polyline1);
-    
+
     const line1 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
     line1.setAttribute('x1', '9');
     line1.setAttribute('y1', '20');
     line1.setAttribute('x2', '15');
     line1.setAttribute('y2', '20');
     svg.appendChild(line1);
-    
+
     const line2 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
     line2.setAttribute('x1', '12');
     line2.setAttribute('y1', '4');
     line2.setAttribute('x2', '12');
     line2.setAttribute('y2', '20');
     svg.appendChild(line2);
-    
+
     container.appendChild(svg);
   }
 
@@ -715,33 +758,33 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
     svg.setAttribute('stroke-linecap', 'round');
     svg.setAttribute('stroke-linejoin', 'round');
     svg.classList.add('svg-icon', 'lucide-file-text');
-    
+
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     path.setAttribute('d', 'M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z');
     svg.appendChild(path);
-    
+
     const polyline1 = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
     polyline1.setAttribute('points', '14,2 14,8 20,8');
     svg.appendChild(polyline1);
-    
+
     const line1 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
     line1.setAttribute('x1', '16');
     line1.setAttribute('y1', '13');
     line1.setAttribute('x2', '8');
     line1.setAttribute('y2', '13');
     svg.appendChild(line1);
-    
+
     const line2 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
     line2.setAttribute('x1', '16');
     line2.setAttribute('y1', '17');
     line2.setAttribute('x2', '8');
     line2.setAttribute('y2', '17');
     svg.appendChild(line2);
-    
+
     const polyline2 = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
     polyline2.setAttribute('points', '10,9 9,9 8,9');
     svg.appendChild(polyline2);
-    
+
     container.appendChild(svg);
   }
 
@@ -756,15 +799,15 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
     svg.setAttribute('stroke-linecap', 'round');
     svg.setAttribute('stroke-linejoin', 'round');
     svg.classList.add('svg-icon', 'lucide-forward');
-    
+
     const polyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
     polyline.setAttribute('points', '15 17 20 12 15 7');
     svg.appendChild(polyline);
-    
+
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     path.setAttribute('d', 'M4 18v-2a4 4 0 0 1 4-4h12');
     svg.appendChild(path);
-    
+
     container.appendChild(svg);
   }
 
@@ -779,29 +822,29 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
     svg.setAttribute('stroke-linecap', 'round');
     svg.setAttribute('stroke-linejoin', 'round');
     svg.classList.add('svg-icon', 'lucide-file-plus');
-    
+
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     path.setAttribute('d', 'M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z');
     svg.appendChild(path);
-    
+
     const polyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
     polyline.setAttribute('points', '14,2 14,8 20,8');
     svg.appendChild(polyline);
-    
+
     const line1 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
     line1.setAttribute('x1', '12');
     line1.setAttribute('y1', '18');
     line1.setAttribute('x2', '12');
     line1.setAttribute('y2', '12');
     svg.appendChild(line1);
-    
+
     const line2 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
     line2.setAttribute('x1', '9');
     line2.setAttribute('y1', '15');
     line2.setAttribute('x2', '15');
     line2.setAttribute('y2', '15');
     svg.appendChild(line2);
-    
+
     container.appendChild(svg);
   }
 
@@ -821,9 +864,9 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
     const cache = this.app.metadataCache.getFileCache(file);
     const frontmatter = cache?.frontmatter;
     const aliases = frontmatter?.aliases as unknown;
-    
+
     if (!aliases) return false;
-    
+
     // For now, show alias icon if the file has aliases and we're not using a custom property
     const isUsingCustomProperty = this.isUsingCustomProperty(file);
     return !isUsingCustomProperty && Boolean(aliases);
@@ -835,7 +878,7 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
       const unresolvedText = item.unresolvedText;
       const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
       const sourcePath = activeView?.file?.path || '';
-      
+
       // Use openLinkText which respects Obsidian's default new note location settings
       void this.app.workspace.openLinkText(unresolvedText, sourcePath).catch((err: unknown) => {
         const message = err instanceof Error ? err.message : String(err);
@@ -843,11 +886,11 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
       });
       return;
     }
-    
+
     if ('isNewNote' in item) {
       const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
       const sourcePath = activeView?.file?.path || '';
-      
+
       // Use openLinkText which respects Obsidian's default new note location settings
       void this.app.workspace.openLinkText(item.newName, sourcePath).catch((err: unknown) => {
         const message = err instanceof Error ? err.message : String(err);

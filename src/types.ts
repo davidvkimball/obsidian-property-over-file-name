@@ -1,5 +1,7 @@
 import { TFile, TFolder, Plugin, Workspace } from 'obsidian';
 
+export type ExcludedFilesBehavior = 'deemphasize' | 'hide' | 'ignore';
+
 export interface PluginSettings {
   propertyKey: string;
   enableForLinking: boolean;
@@ -16,6 +18,8 @@ export interface PluginSettings {
   enableForWindowFrame: boolean;
   enableForBookmarks: boolean;
   enableMdxSupport: boolean;
+  quickSwitcherExcludedBehavior: ExcludedFilesBehavior;
+  linkSuggesterExcludedBehavior: ExcludedFilesBehavior;
 }
 
 export interface CachedFileData {
@@ -66,6 +70,10 @@ export interface EditorSuggestInternal {
 
 export interface VaultInternal {
   getConfig(key: string): boolean;
+}
+
+export interface MetadataCacheInternal {
+  isExcludedFile?(fileOrPath: TFile | string): boolean;
 }
 
 export interface WorkspaceInternal {
