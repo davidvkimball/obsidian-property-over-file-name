@@ -537,11 +537,11 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
         exactMatch = Array.from(unresolvedSet).some(link => link.toLowerCase() === lowerQuery);
       }
 
-      // Always add new note option if no exact match exists
+      // Always add new note option if no results
       // "Show existing only" only affects showing unresolved links, not creating new notes
-      if (!exactMatch && searchQuery) {
+      if (filteredResults.length === 0 && searchQuery) {
         const newItem: NewNoteItem = { isNewNote: true, newName: searchQuery };
-        filteredResults.unshift({
+        filteredResults.push({
           item: newItem,
           match: { score: 1000, matches: [[0, searchQuery.length]] },
         });
@@ -907,8 +907,20 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
           // Open in new tab
           void this.app.workspace.getLeaf().openFile(item);
         } else if (evt.shiftKey) {
-          // Create new note (this shouldn't happen for existing files, but keeping for consistency)
-          void this.app.workspace.getLeaf().openFile(item);
+          // Create new note with the exact search query, like default quick switcher
+          const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+          const sourcePath = activeView?.file?.path || '';
+          const currentQuery = this.inputEl.value.trim();
+
+          if (currentQuery) {
+            void this.app.workspace.openLinkText(currentQuery, sourcePath).catch((err: unknown) => {
+              const message = err instanceof Error ? err.message : String(err);
+              new Notice(`Error creating note: ${message}`);
+            });
+          } else {
+            // Default: open in current tab if search query is empty
+            void this.app.workspace.getLeaf().openFile(item);
+          }
         } else {
           // Default: open in current tab
           void this.app.workspace.getLeaf().openFile(item);
