@@ -21,15 +21,15 @@ export class SettingTab extends PluginSettingTab {
     // Create a single settings group with no heading (following UI Tweaker pattern)
     const generalGroup = new SettingGroup(containerEl);
 
-    generalGroup.addSetting((setting: any) => {
+    generalGroup.addSetting(setting => {
       setting
         .setName('Property key')
         .setDesc('The property to use as the display title. Falls back to the file name when no property is set for that item.')
-        .addText((text: any) =>
+        .addText(text =>
           text
             .setPlaceholder('Title')
             .setValue(this.plugin.settings.propertyKey)
-            .onChange(async (value: any) => {
+            .onChange(async value => {
               this.plugin.settings.propertyKey = value.trim() || 'title';
               await this.plugin.saveData(this.plugin.settings);
               this.plugin.updateLinkSuggester();
@@ -43,14 +43,14 @@ export class SettingTab extends PluginSettingTab {
         );
     });
 
-    generalGroup.addSetting((setting: any) => {
+    generalGroup.addSetting(setting => {
       setting
         .setName('When linking notes')
         .setDesc('Enable property-based titles in the link suggester.')
-        .addToggle((toggle: any) =>
+        .addToggle(toggle =>
           toggle
             .setValue(this.plugin.settings.enableForLinking)
-            .onChange(async (value: any) => {
+            .onChange(async value => {
               this.plugin.settings.enableForLinking = value;
               await this.plugin.saveData(this.plugin.settings);
               this.plugin.updateLinkSuggester();
@@ -58,14 +58,14 @@ export class SettingTab extends PluginSettingTab {
         );
     });
 
-    generalGroup.addSetting((setting: any) => {
+    generalGroup.addSetting(setting => {
       setting
         .setName('In quick switcher')
         .setDesc('Enable property-based titles in the quick switcher.')
-        .addToggle((toggle: any) =>
+        .addToggle(toggle =>
           toggle
             .setValue(this.plugin.settings.enableForQuickSwitcher)
-            .onChange(async (value: any) => {
+            .onChange(async value => {
               const prevQuickSwitcherState = this.plugin.settings.enableForQuickSwitcher;
               this.plugin.settings.enableForQuickSwitcher = value;
               await this.plugin.saveSettings(prevQuickSwitcherState);
@@ -73,56 +73,56 @@ export class SettingTab extends PluginSettingTab {
         );
     });
 
-    generalGroup.addSetting((setting: any) => {
+    generalGroup.addSetting(setting => {
       setting
         .setName('Include file name in fuzzy searches')
         .setDesc('Include note file names in fuzzy search results for link suggester and quick switcher.')
-        .addToggle((toggle: any) =>
+        .addToggle(toggle =>
           toggle
             .setValue(this.plugin.settings.includeFilenameInSearch)
-            .onChange(async (value: any) => {
+            .onChange(async value => {
               this.plugin.settings.includeFilenameInSearch = value;
               await this.plugin.saveData(this.plugin.settings);
             })
         );
     });
 
-    generalGroup.addSetting((setting: any) => {
+    generalGroup.addSetting(setting => {
       setting
         .setName('Include aliases in fuzzy searches')
         .setDesc('Include property aliases in fuzzy search results for link suggester and quick switcher.')
-        .addToggle((toggle: any) =>
+        .addToggle(toggle =>
           toggle
             .setValue(this.plugin.settings.includeAliasesInSearch)
-            .onChange(async (value: any) => {
+            .onChange(async value => {
               this.plugin.settings.includeAliasesInSearch = value;
               await this.plugin.saveData(this.plugin.settings);
             })
         );
     });
 
-    generalGroup.addSetting((setting: any) => {
+    generalGroup.addSetting(setting => {
       setting
         .setName('When dragging notes')
         .setDesc('Use property-based titles when dragging notes from the file explorer.')
-        .addToggle((toggle: any) =>
+        .addToggle(toggle =>
           toggle
             .setValue(this.plugin.settings.enableForDragDrop)
-            .onChange(async (value: any) => {
+            .onChange(async value => {
               this.plugin.settings.enableForDragDrop = value;
               await this.plugin.saveData(this.plugin.settings);
             })
         );
     });
 
-    generalGroup.addSetting((setting: any) => {
+    generalGroup.addSetting(setting => {
       setting
         .setName('When naming bookmarks')
         .setDesc('Automatically use the configured property value as the default name when creating a bookmark.')
-        .addToggle((toggle: any) =>
+        .addToggle(toggle =>
           toggle
             .setValue(this.plugin.settings.enableForBookmarks)
-            .onChange(async (value: any) => {
+            .onChange(async value => {
               this.plugin.settings.enableForBookmarks = value;
               await this.plugin.saveData(this.plugin.settings);
               this.plugin.updateBookmarks();
@@ -130,28 +130,28 @@ export class SettingTab extends PluginSettingTab {
         );
     });
 
-    generalGroup.addSetting((setting: any) => {
+    generalGroup.addSetting(setting => {
       setting
         .setName('In graph view')
         .setDesc('Use the property instead of the file name as the note\'s title in graph view.')
-        .addToggle((toggle: any) =>
+        .addToggle(toggle =>
           toggle
             .setValue(this.plugin.settings.enableForGraphView)
-            .onChange(async (value: any) => {
+            .onChange(async value => {
               this.plugin.settings.enableForGraphView = value;
               await this.plugin.saveSettings();
             })
         );
     });
 
-    generalGroup.addSetting((setting: any) => {
+    generalGroup.addSetting(setting => {
       setting
         .setName('In backlinks and outgoing links')
         .setDesc('Use the property instead of the file name in the linked mentions footer, dedicated backlinks panel, and outgoing links.')
-        .addToggle((toggle: any) =>
+        .addToggle(toggle =>
           toggle
             .setValue(this.plugin.settings.enableForBacklinks)
-            .onChange(async (value: any) => {
+            .onChange(async value => {
               this.plugin.settings.enableForBacklinks = value;
               await this.plugin.saveData(this.plugin.settings);
               this.plugin.updateBacklinks();
@@ -159,14 +159,14 @@ export class SettingTab extends PluginSettingTab {
         );
     });
 
-    generalGroup.addSetting((setting: any) => {
+    generalGroup.addSetting(setting => {
       setting
         .setName('In tab titles')
         .setDesc('Use the property instead of the file name in tab titles.')
-        .addToggle((toggle: any) =>
+        .addToggle(toggle =>
           toggle
             .setValue(this.plugin.settings.enableForTabs)
-            .onChange(async (value: any) => {
+            .onChange(async value => {
               const prevTabState = this.plugin.settings.enableForTabs;
               this.plugin.settings.enableForTabs = value;
               await this.plugin.saveSettings(undefined, prevTabState);
@@ -174,14 +174,14 @@ export class SettingTab extends PluginSettingTab {
         );
     });
 
-    generalGroup.addSetting((setting: any) => {
+    generalGroup.addSetting(setting => {
       setting
         .setName('In window frame title')
         .setDesc('Use the property instead of the file name in the browser window title bar.')
-        .addToggle((toggle: any) =>
+        .addToggle(toggle =>
           toggle
             .setValue(this.plugin.settings.enableForWindowFrame)
-            .onChange(async (value: any) => {
+            .onChange(async value => {
               this.plugin.settings.enableForWindowFrame = value;
               await this.plugin.saveData(this.plugin.settings);
               this.plugin.updateWindowFrame();
@@ -189,14 +189,14 @@ export class SettingTab extends PluginSettingTab {
         );
     });
 
-    generalGroup.addSetting((setting: any) => {
+    generalGroup.addSetting(setting => {
       setting
         .setName('In file explorer')
         .setDesc('Use the property instead of the file name in the file explorer.')
-        .addToggle((toggle: any) =>
+        .addToggle(toggle =>
           toggle
             .setValue(this.plugin.settings.enableForExplorer)
-            .onChange(async (value: any) => {
+            .onChange(async value => {
               this.plugin.settings.enableForExplorer = value;
               await this.plugin.saveData(this.plugin.settings);
               this.plugin.updateExplorer();
@@ -207,15 +207,15 @@ export class SettingTab extends PluginSettingTab {
 
     // Show folder note file name setting only if explorer is enabled
     if (this.plugin.settings.enableForExplorer) {
-      generalGroup.addSetting((setting: any) => {
+      generalGroup.addSetting(setting => {
         setting
           .setName('Folder note file name')
           .setDesc('If a folder contains a file with this name that has the configured property, the folder will display that property value instead. This ensures compatibility with folder notes plugins. Leave blank to disable.')
-          .addText((text: any) =>
+          .addText(text =>
             text
               .setPlaceholder('Index')
               .setValue(this.plugin.settings.folderNoteFilename)
-              .onChange(async (value: any) => {
+              .onChange(async value => {
                 this.plugin.settings.folderNoteFilename = value.trim();
                 await this.plugin.saveData(this.plugin.settings);
                 this.plugin.updateExplorer();
@@ -224,25 +224,25 @@ export class SettingTab extends PluginSettingTab {
       });
     }
 
-    generalGroup.addSetting((setting: any) => {
+    generalGroup.addSetting(setting => {
       setting
         .setName('Use simple search')
         .setDesc('Instead of using fuzzy search, simple search provides better performance with very large vaults (thousands of files).')
-        .addToggle((toggle: any) =>
+        .addToggle(toggle =>
           toggle
             .setValue(this.plugin.settings.useSimpleSearch)
-            .onChange(async (value: any) => {
+            .onChange(async value => {
               this.plugin.settings.useSimpleSearch = value;
               await this.plugin.saveData(this.plugin.settings);
             })
         );
     });
 
-    generalGroup.addSetting((setting: any) => {
+    generalGroup.addSetting(setting => {
       setting
         .setName('Excluded files in quick switcher')
         .setDesc('How files in Obsidian\'s "Excluded files" list should behave in the quick switcher.')
-        .addDropdown((dropdown: any) =>
+        .addDropdown(dropdown =>
           dropdown
             .addOptions({
               deemphasize: 'Deemphasize (move to bottom & gray out)',
@@ -250,7 +250,7 @@ export class SettingTab extends PluginSettingTab {
               ignore: 'Ignore (treat as normal files)',
             })
             .setValue(this.plugin.settings.quickSwitcherExcludedBehavior)
-            .onChange(async (value: any) => {
+            .onChange(async value => {
               this.plugin.settings.quickSwitcherExcludedBehavior = value as any;
               await this.plugin.saveData(this.plugin.settings);
               this.plugin.updateQuickSwitcher();
@@ -258,11 +258,11 @@ export class SettingTab extends PluginSettingTab {
         );
     });
 
-    generalGroup.addSetting((setting: any) => {
+    generalGroup.addSetting(setting => {
       setting
         .setName('Excluded files in link suggester')
         .setDesc('How files in Obsidian\'s "Excluded files" list should behave in the link suggester.')
-        .addDropdown((dropdown: any) =>
+        .addDropdown(dropdown =>
           dropdown
             .addOptions({
               deemphasize: 'Deemphasize (move to bottom & gray out)',
@@ -270,7 +270,7 @@ export class SettingTab extends PluginSettingTab {
               ignore: 'Ignore (treat as normal files)',
             })
             .setValue(this.plugin.settings.linkSuggesterExcludedBehavior)
-            .onChange(async (value: any) => {
+            .onChange(async value => {
               this.plugin.settings.linkSuggesterExcludedBehavior = value as any;
               await this.plugin.saveData(this.plugin.settings);
               this.plugin.updateLinkSuggester();
@@ -278,14 +278,14 @@ export class SettingTab extends PluginSettingTab {
         );
     });
 
-    generalGroup.addSetting((setting: any) => {
+    generalGroup.addSetting(setting => {
       setting
         .setName('Enable MDX file support')
         .setDesc('Enable support for .mdx files. When enabled, the plugin will read properties from Mdx files manually (Obsidian\'s metadata cache only works for .md files). Note: Mdx support is partial - graph view is not supported due to technical limitations.')
-        .addToggle((toggle: any) =>
+        .addToggle(toggle =>
           toggle
             .setValue(this.plugin.settings.enableMdxSupport)
-            .onChange(async (value: any) => {
+            .onChange(async value => {
               this.plugin.settings.enableMdxSupport = value;
               await this.plugin.saveSettings();
               // Rebuild cache and refresh all components when MDX support is toggled
