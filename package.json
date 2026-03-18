@@ -1,6 +1,6 @@
 {
 	"name": "property-over-file-name",
-	"version": "0.7.3",
+	"version": "0.7.4",
 	"description": "Search, display, and insert notes using a specified note property instead of the file name.",
 	"main": "main.js",
 	"type": "module",
@@ -14,7 +14,7 @@
 		"upgrade": "node scripts/upgrade.mjs"
 	},
 	"author": "",
-	"license": "GPL-3.0",
+	"license": "MIT",
 	"devDependencies": {
 		"@eslint/js": "^9.30.1",
 		"@eslint/json": "^0.14.0",

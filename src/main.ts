@@ -125,7 +125,7 @@ export default class PropertyOverFileNamePlugin extends Plugin {
       }, 500);
     });
 
-    // Listen for layout changes - exactly like Node Masquerade
+    // Listen for layout changes (GraphViewService handles graph/local graph updates)
     this.registerEvent(
       this.app.workspace.on('layout-change', () => {
         this.graphViewService.onLayoutChange();

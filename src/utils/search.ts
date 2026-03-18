@@ -1,6 +1,7 @@
 import { TFile, MetadataCache, App } from 'obsidian';
 import { CachedFileData, PluginSettings } from '../types';
 import { isFileTypeSupported } from './frontmatter';
+import type { MetadataCacheInternal } from '../types';
 
 export function fuzzyMatch(str: string, query: string): boolean {
   let i = 0;
@@ -111,7 +112,7 @@ export async function buildFileCache(
 }
 
 export function isExcluded(file: TFile, app: App): boolean {
-  const metadataCache = app.metadataCache as any;
+  const metadataCache = app.metadataCache as unknown as MetadataCacheInternal;
 
   // 1. Try the official-ish but internal API
   if (typeof metadataCache.isExcludedFile === 'function') {
@@ -119,28 +120,29 @@ export function isExcluded(file: TFile, app: App): boolean {
       // Some versions expect TFile, some expect path string
       if (metadataCache.isExcludedFile(file)) return true;
       if (metadataCache.isExcludedFile(file.path)) return true;
-    } catch (e) {
+    } catch {
       // Ignore errors and move to fallback
     }
   }
 
   // 2. Manual fallback using userIgnoreFilters
   try {
-    const filters = (app.vault as any).getConfig('userIgnoreFilters');
+    const vault = app.vault as unknown as { getConfig?: (key: string) => unknown };
+    const filters = vault.getConfig?.('userIgnoreFilters');
     if (Array.isArray(filters)) {
       const path = file.path;
       for (const filter of filters) {
         if (!filter) continue;
         // Folder filters often end with /
-        if (filter.endsWith('/')) {
+        if (typeof filter === 'string' && filter.endsWith('/')) {
           if (path.startsWith(filter)) return true;
-        } else {
+        } else if (typeof filter === 'string') {
           // Exact match or matches a parent folder
           if (path === filter || path.startsWith(filter + '/')) return true;
         }
       }
     }
-  } catch (e) {
+  } catch {
     // Ignore errors
   }
 

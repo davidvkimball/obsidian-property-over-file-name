@@ -1,308 +1,540 @@
 /**
- * Graph View Service
+ * Clean-room implementation for graph/local graph node labeling.
  *
- * This file contains code adapted from the Node Masquerade plugin by ElsaTam.
- * Original source: https://github.com/Kapirklaa/obsidian-node-masquerade
- *
- * The code has been modified to integrate with the Property Over File Name plugin
- * and use the plugin's property key setting instead of Node Masquerade's configuration.
- *
- * Original code is licensed under GPLv3. This file is also licensed under GPLv3.
+ * This file is an original implementation written for Property Over File Name.
+ * It is not derived from any GPL-licensed code.
  */
-
-import { App, View, WorkspaceLeaf } from 'obsidian';
-import { PropertyOverFileNamePlugin } from '../types';
+import { TFile } from 'obsidian';
+import type { PropertyOverFileNamePlugin } from '../types';
 import { frontmatterCache } from '../utils/frontmatter-cache';
 
-// Static display settings - exactly like Node Masquerade
-let graphDisplaySettings: { enableForGraphView: boolean; propertyKey: string; enableMdxSupport: boolean; app: App } | null = null;
+type GraphLeafType = 'graph' | 'localgraph';
 
-function createGetDisplayText(app: App) {
-	return function getDisplayText(this: GraphNode): string {
-		if (!graphDisplaySettings?.enableForGraphView) {
-			// If disabled, use original
-			if (this.pov_originalGetDisplayText) {
-				return this.pov_originalGetDisplayText();
-			}
-			throw new Error('pov_originalGetDisplayText does not exist on node');
-		}
+type GraphNodeText = { text: string };
 
-		// Try to get property value - exactly like Node Masquerade logic but for properties
-		const file = app.vault.getFileByPath(this.id);
+type GraphNode = {
+  id?: unknown; // likely file path, but can vary across Obsidian versions
+  text?: GraphNodeText;
+  getDisplayText?: () => string;
+};
 
-		if (file) {
-			// For both MD and MDX files, try frontmatter parsing
-			if ((file.extension === 'md' || (file.extension === 'mdx' && graphDisplaySettings.enableMdxSupport))) {
-				if (file.extension === 'md') {
-					// For MD files, use metadata cache directly (fast sync access)
-					const fileCache = app.metadataCache.getFileCache(file);
-					const mdFrontmatter = fileCache?.frontmatter;
+type GraphRenderer = {
+  nodes?: unknown;
+  changed?: () => void;
+};
 
-					if (mdFrontmatter && mdFrontmatter[graphDisplaySettings.propertyKey] !== undefined && mdFrontmatter[graphDisplaySettings.propertyKey] !== null) {
-						const propertyValue = String(mdFrontmatter[graphDisplaySettings.propertyKey]).trim();
-						if (propertyValue !== '') {
-							return propertyValue;
-						}
-					}
-				} else if (file.extension === 'mdx') {
-					// For MDX files, check cache first, then trigger async population if needed
-					const cached = frontmatterCache.getSync(file.path);
+type GraphView = {
+  renderer?: GraphRenderer;
+};
 
-					if (cached !== undefined) {
-						if (cached && cached[graphDisplaySettings.propertyKey] !== undefined && cached[graphDisplaySettings.propertyKey] !== null) {
-							const propertyValue = String(cached[graphDisplaySettings.propertyKey]).trim();
-							if (propertyValue !== '') {
-								return propertyValue;
-							}
-						}
-					} else {
-						// Trigger async load in background
-						void frontmatterCache.get(app, file, { enableMdxSupport: graphDisplaySettings.enableMdxSupport, propertyKey: graphDisplaySettings.propertyKey } as any);
-					}
-				}
-			}
-		}
+type LeafLike = {
+  id?: string;
+  view?: GraphView;
+};
 
-		// Fall back to original display text (file name) - exactly like Node Masquerade
-		if (this.pov_originalGetDisplayText) {
-			return this.pov_originalGetDisplayText();
-		}
-		throw new Error('pov_originalGetDisplayText does not exist on node');
-	};
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
 }
 
-// Type definitions for graph view internals
-interface GraphNodeCollection {
-  first(): GraphNode | undefined;
-  [Symbol.iterator](): Iterator<GraphNode>;
+function coerceFrontmatterValueToLabel(value: unknown): string | null {
+  if (isNonEmptyString(value)) return value.trim();
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  if (typeof value === 'boolean') return value ? 'true' : 'false';
+  return null;
 }
 
-interface GraphView {
-  renderer: {
-    nodes: GraphNodeCollection;
-    changed(): void;
-  };
+function getLeafKey(leafType: GraphLeafType, leafId: string): string {
+  return `${leafType}:${leafId}`;
 }
 
-interface LocalGraphView {
-  renderer: {
-    nodes: GraphNodeCollection;
-    changed(): void;
-  };
+function asLeafLike(value: unknown): LeafLike | null {
+  if (!value || typeof value !== 'object') return null;
+  return value as LeafLike;
 }
 
-interface GraphNode {
-  id: string;
-  text?: {
-    text: string;
-  };
-  getDisplayText(): string;
-  pov_originalGetDisplayText?: () => string;
+function isGraphNode(value: unknown): value is GraphNode {
+  if (!value || typeof value !== 'object') return false;
+  const v = value as { id?: unknown; text?: { text?: unknown }; getDisplayText?: unknown };
+  return typeof v.id === 'string' || typeof v.text?.text === 'string';
 }
 
-interface GraphNodePrototype {
-  getDisplayText(): string;
-  pov_originalGetDisplayText?: () => string;
+function isNodeTextCarrier(node: GraphNode): node is GraphNode & { text: GraphNodeText } {
+  return !!node.text && typeof node.text.text === 'string';
 }
 
-interface GraphNodeCollectionWithFirst extends GraphNodeCollection {
-  first(): GraphNode | undefined;
+function iterateGraphNodes(nodes: unknown, cb: (node: GraphNode) => void): void {
+  if (!nodes) return;
+  try {
+    if (nodes instanceof Map) {
+      for (const v of nodes.values()) if (isGraphNode(v)) cb(v);
+      return;
+    }
+    if (nodes instanceof Set) {
+      for (const v of nodes.values()) if (isGraphNode(v)) cb(v);
+      return;
+    }
+    if (Array.isArray(nodes)) {
+      for (const v of nodes) if (isGraphNode(v)) cb(v);
+      return;
+    }
+
+    const maybeIterable = nodes as { [Symbol.iterator]?: () => Iterator<unknown> };
+    if (typeof maybeIterable[Symbol.iterator] === 'function') {
+      for (const v of nodes as Iterable<unknown>) if (isGraphNode(v)) cb(v);
+      return;
+    }
+
+    if (typeof nodes === 'object' && nodes) {
+      for (const v of Object.values(nodes as Record<string, unknown>)) if (isGraphNode(v)) cb(v);
+    }
+  } catch {
+    // ignore
+  }
 }
 
 export class GraphViewService {
   private plugin: PropertyOverFileNamePlugin;
-  private modifiedPrototypes: GraphNodePrototype[] = [];
-  private observer: MutationObserver | null = null;
-  private timer: number | null = null;
+
+  private observer?: MutationObserver;
+  private refreshTimer?: number;
+  private retryTimers = new Set<number>();
+
+  private pendingMdxRefreshPaths = new Set<string>();
+  private pendingMdxRefreshTimer?: number;
+
+  private installed = false;
+  private originalsByPrototype = new Map<object, (this: GraphNode) => string>();
+  private originalNodeText = new WeakMap<object, string>();
+
+  // Track which leaves we've already attempted to patch (best-effort identity).
+  private seenLeaves = new Set<string>();
+
+  private basenameIndex = new Map<string, TFile>();
+  private basenameIndexBuiltForMdxSupport: boolean | null = null;
 
   constructor(plugin: PropertyOverFileNamePlugin) {
     this.plugin = plugin;
-    // Set static display settings - exactly like Node Masquerade
-    graphDisplaySettings = {
-      enableForGraphView: plugin.settings.enableForGraphView,
-      propertyKey: plugin.settings.propertyKey,
-      enableMdxSupport: plugin.settings.enableMdxSupport,
-      app: plugin.app
-    };
   }
 
-
-  private getGraphLeaves(): WorkspaceLeaf[] {
-    const leaves: WorkspaceLeaf[] = [];
-    leaves.push(...this.plugin.app.workspace.getLeavesOfType('graph'));
-    leaves.push(...this.plugin.app.workspace.getLeavesOfType('localgraph'));
-    return [...new Set(leaves)];
+  onLayoutChange(): void {
+    // Layout changes can create/destroy graph views.
+    this.updateGraphView();
   }
 
-  private async overridePrototypes() {
-    const leaves = this.getGraphLeaves();
-    for (const leaf of leaves) {
-      if (!(leaf.view instanceof View) || leaf.isDeferred) continue;
-      const view = leaf.view as unknown as GraphView | LocalGraphView;
-      await this.overridePrototype(view);
-    }
-  }
-
-  private async overridePrototype(view: GraphView | LocalGraphView) {
-    // Check if graph view has nodes loaded yet
-    let nodeCount = 0;
-    for (const graphNode of view.renderer.nodes) {
-      nodeCount++;
-    }
-
-    if (nodeCount === 0) {
-      // Graph view is empty, try again in 1 second
-      setTimeout(() => {
-        void this.overridePrototype(view);
-      }, 1000);
-      return;
-    }
-
-    // Pre-populate cache for MDX files in the graph
-    if (graphDisplaySettings?.enableMdxSupport) {
-      const mdxPromises: Promise<void>[] = [];
-
-      for (const graphNode of view.renderer.nodes) {
-        const file = graphDisplaySettings.app.vault.getFileByPath(graphNode.id);
-        if (file && file.extension === 'mdx') {
-          const promise = frontmatterCache.get(graphDisplaySettings.app, file, { enableMdxSupport: graphDisplaySettings.enableMdxSupport, propertyKey: graphDisplaySettings.propertyKey } as any);
-          mdxPromises.push(promise.then(() => {}));
-        }
-      }
-
-      // Wait for all MDX cache population to complete
-      if (mdxPromises.length > 0) {
-        await Promise.all(mdxPromises);
-      }
-    }
-
-    const node = view.renderer.nodes.first();
-
-    if (node) {
-      const proto = node.constructor.prototype;
-      if (!proto.hasOwnProperty('pov_originalGetDisplayText') && !this.modifiedPrototypes.contains(proto)) {
-        proto.pov_originalGetDisplayText = proto.getDisplayText;
-        proto.getDisplayText = createGetDisplayText(this.plugin.app);
-        let updatedCount = 0;
-        for (const node of view.renderer.nodes) {
-          if (node.text) {
-            node.text.text = node.getDisplayText();
-            updatedCount++;
-          }
-        }
-        view.renderer.changed();
-        this.modifiedPrototypes.push(proto);
-      }
-    }
-  }
-
-  private restorePrototypes() {
-    for (const proto of this.modifiedPrototypes) {
-      if (typeof proto.pov_originalGetDisplayText === 'function') {
-        proto.getDisplayText = proto.pov_originalGetDisplayText;
-        delete proto.pov_originalGetDisplayText;
-      }
-    }
-    this.modifiedPrototypes = [];
-    this.rewriteNames();
-  }
-
-  rewriteNames() {
-    const leaves = this.getGraphLeaves();
-    for (const leaf of leaves) {
-      if (!(leaf.view instanceof View) || leaf.isDeferred) continue;
-      const view = leaf.view as unknown as GraphView | LocalGraphView;
-      for (const node of view.renderer.nodes) {
-        if (node.text) node.text.text = node.getDisplayText();
-      }
-      view.renderer.changed();
-    }
-  }
-
-  onLayoutChange() {
-    this.cleanupObserver();
-
+  updateGraphView(): void {
     if (!this.plugin.settings.enableForGraphView) {
-      this.restorePrototypes();
+      this.teardown();
       return;
     }
 
-    // Check if graph plugin is loaded - exactly like Node Masquerade
-    const appInternal = this.plugin.app as any;
-    const isGraphLoaded = appInternal.internalPlugins.getPluginById("graph")?._loaded;
-    if (!isGraphLoaded) return;
-
-    // Use MutationObserver for a more efficient way to detect when nodes are added
-    this.setupObserver();
-    
-    // Also trigger initial override
-    void this.overridePrototypes();
+    this.ensureObserver();
+    this.ensurePatchedForOpenLeaves();
+    this.refreshGraphView();
   }
 
-  private setupObserver() {
-    // Look for graph containers in all leaves
+  refreshGraphView(): void {
+    if (!this.plugin.settings.enableForGraphView) return;
+    this.ensurePatchedForOpenLeaves();
+    this.triggerRenderOnAllGraphViewsWithRetry();
+  }
+
+  onunload(): void {
+    this.teardown();
+  }
+
+  // --- Patch management ---
+
+  private ensurePatchedForOpenLeaves(): void {
+    if (!this.plugin.settings.enableForGraphView) return;
+
     const leaves = this.getGraphLeaves();
-    for (const leaf of leaves) {
-      const container = leaf.view.containerEl;
-      if (!container) continue;
+    for (const { leafType, leaf } of leaves) {
+      const leafLike = asLeafLike(leaf);
+      const leafId = leafLike?.id;
+      const leafKey = getLeafKey(leafType, isNonEmptyString(leafId) ? leafId : String(leaf));
+      if (!this.seenLeaves.has(leafKey)) this.seenLeaves.add(leafKey);
+      this.tryInstallPatchFromLeaf(leaf);
+    }
+  }
 
-      if (!this.observer) {
-        this.observer = new MutationObserver(() => {
-          // Debounce updates to avoid excessive processing
-          if (this.timer) window.clearTimeout(this.timer);
-          this.timer = window.setTimeout(() => {
-            void this.overridePrototypes();
-          }, 500);
-        });
-      }
+  private tryInstallPatchFromLeaf(leaf: unknown): void {
+    const view = asLeafLike(leaf)?.view;
+    const renderer = view?.renderer;
+    if (!renderer) return;
 
-      // Observe the container for additions of graph-related elements
-      this.observer.observe(container, {
-        childList: true,
-        subtree: true
+    const nodes = renderer.nodes;
+    if (!nodes) return;
+
+    const sampleNode = this.pickAnyNode(nodes);
+    if (!sampleNode) return;
+
+    const protoUnknown: unknown = Object.getPrototypeOf(sampleNode);
+    if (!protoUnknown || typeof protoUnknown !== 'object') return;
+    const proto = protoUnknown;
+
+    const protoWithMethod = proto as { getDisplayText?: (this: GraphNode) => string };
+    const current = protoWithMethod.getDisplayText;
+    if (typeof current !== 'function') return;
+
+    if (this.originalsByPrototype.has(proto)) {
+      this.installed = true;
+      return;
+    }
+
+    const original = current;
+    this.originalsByPrototype.set(proto, original);
+
+    const resolveLabel = (node: GraphNode): string => {
+      // Prefer per-node `.text.text` if present (Obsidian sometimes caches label there),
+      // but always allow falling back to original.
+      const fallback = safeCall(original, node);
+      const label = this.computeNodeLabel(node);
+      return label ?? fallback;
+    };
+
+    protoWithMethod.getDisplayText = function patchedGetDisplayText(this: GraphNode): string {
+      return resolveLabel(this);
+    };
+
+    // Mark installed and refresh.
+    this.installed = true;
+  }
+
+  private teardown(): void {
+    this.disconnectObserver();
+    this.clearAllTimers();
+    this.restoreNodeTextsFromOpenLeaves();
+    this.restoreAllPatches();
+    this.seenLeaves.clear();
+    this.pendingMdxRefreshPaths.clear();
+    this.originalNodeText = new WeakMap<object, string>();
+  }
+
+  private restoreNodeTextsFromOpenLeaves(): void {
+    const leaves = this.getGraphLeaves();
+    for (const { leaf } of leaves) {
+      const view = asLeafLike(leaf)?.view;
+      const nodes = view?.renderer?.nodes;
+      if (!nodes) continue;
+
+      iterateGraphNodes(nodes, (node) => {
+        if (!node || typeof node !== 'object') return;
+        if (!isNodeTextCarrier(node)) return;
+        const original = this.originalNodeText.get(node as unknown as object);
+        if (original !== undefined) node.text.text = original;
       });
     }
-
-    // Fallback: if no observer could be set up, or as an extra safety measure,
-    // we could keep a very infrequent interval, but the requirement is to replace it.
   }
 
-  private cleanupObserver() {
-    if (this.observer) {
+  private restoreAllPatches(): void {
+    for (const [proto, original] of this.originalsByPrototype.entries()) {
+      try {
+        (proto as { getDisplayText?: (this: GraphNode) => string }).getDisplayText = original;
+      } catch {
+        // best-effort restore
+      }
+    }
+    this.originalsByPrototype.clear();
+    this.installed = false;
+  }
+
+  // --- Observer / refresh ---
+
+  private ensureObserver(): void {
+    if (this.observer) return;
+
+    this.observer = new MutationObserver(() => {
+      if (!this.plugin.settings.enableForGraphView) return;
+      // Debounce to avoid hammering renderer.changed() during large layout operations.
+      if (this.refreshTimer) window.clearTimeout(this.refreshTimer);
+      this.refreshTimer = window.setTimeout(() => {
+        this.refreshTimer = undefined;
+        this.ensurePatchedForOpenLeaves();
+        this.triggerRenderOnAllGraphViewsWithRetry();
+      }, 150);
+    });
+
+    this.observer.observe(document.body, { childList: true, subtree: true });
+  }
+
+  private disconnectObserver(): void {
+    if (!this.observer) return;
+    try {
       this.observer.disconnect();
-      this.observer = null;
-    }
-    if (this.timer) {
-      window.clearTimeout(this.timer);
-      this.timer = null;
+    } finally {
+      this.observer = undefined;
     }
   }
 
+  private triggerRenderOnAllGraphViewsWithRetry(): void {
+    const leaves = this.getGraphLeaves();
+    for (const { leaf } of leaves) {
+      this.triggerRenderWithRetry(leaf);
+    }
+  }
 
-  updateGraphView() {
-    // Update static display settings when plugin settings change
-    if (graphDisplaySettings) {
-      graphDisplaySettings.enableForGraphView = this.plugin.settings.enableForGraphView;
-      graphDisplaySettings.propertyKey = this.plugin.settings.propertyKey;
-      graphDisplaySettings.enableMdxSupport = this.plugin.settings.enableMdxSupport;
+  private triggerRenderWithRetry(leaf: unknown): void {
+    const maxAttempts = 8;
+    const baseDelayMs = 80;
+
+    const attempt = (n: number) => {
+      const view = asLeafLike(leaf)?.view;
+      const renderer = view?.renderer;
+
+      const changed = renderer?.changed;
+      const nodes = renderer?.nodes;
+
+      // If renderer is present but nodes aren't ready yet, retry.
+      if (!renderer || typeof changed !== 'function' || !nodes) {
+        if (n >= maxAttempts) return;
+        const delay = Math.min(1500, baseDelayMs * Math.pow(2, n));
+        const t = window.setTimeout(() => {
+          this.retryTimers.delete(t);
+          attempt(n + 1);
+        }, delay);
+        this.retryTimers.add(t);
+        return;
+      }
+
+      // Ensure patch installed once nodes exist.
+      this.tryInstallPatchFromLeaf(leaf);
+      this.applyLabelsToOpenNodes(renderer, leaf);
+
+      try {
+        changed.call(renderer);
+      } catch {
+        // best-effort
+      }
+    };
+
+    attempt(0);
+  }
+
+  private applyLabelsToOpenNodes(renderer: GraphRenderer, leaf: unknown): void {
+    const nodes = renderer.nodes;
+    if (!nodes) return;
+
+    iterateGraphNodes(nodes, (node) => {
+      if (!isNodeTextCarrier(node)) return;
+      if (!this.plugin.settings.enableForGraphView) return;
+
+      const label = this.computeNodeLabel(node);
+      if (label === null) return;
+
+      const nodeObj = node as unknown as object;
+      if (!this.originalNodeText.has(nodeObj)) {
+        this.originalNodeText.set(nodeObj, node.text.text);
+      }
+      node.text.text = label;
+    });
+  }
+
+  private clearAllTimers(): void {
+    if (this.refreshTimer) window.clearTimeout(this.refreshTimer);
+    this.refreshTimer = undefined;
+
+    for (const t of this.retryTimers) window.clearTimeout(t);
+    this.retryTimers.clear();
+
+    if (this.pendingMdxRefreshTimer) window.clearTimeout(this.pendingMdxRefreshTimer);
+    this.pendingMdxRefreshTimer = undefined;
+  }
+
+  // --- Label computation ---
+
+  private computeNodeLabel(node: GraphNode): string | null {
+    if (!this.plugin.settings.enableForGraphView) return null;
+
+    const propertyKey = this.plugin.settings.propertyKey?.trim() || 'title';
+
+    const fileFromId = this.resolveFileFromNodeId(node.id);
+    const nodeObj = node as unknown as object;
+    const nodeTextForResolution = this.originalNodeText.get(nodeObj) ?? node.text?.text;
+    const file = fileFromId ?? this.resolveFileFromNodeLabel(nodeTextForResolution);
+    if (!(file instanceof TFile)) return null;
+
+    if (file.extension !== 'md' && (file.extension !== 'mdx' || !this.plugin.settings.enableMdxSupport)) return null;
+
+    if (file.extension === 'md') {
+      const fm = this.plugin.app.metadataCache.getFileCache(file)?.frontmatter;
+      const fmRecord = fm && typeof fm === 'object' ? (fm as Record<string, unknown>) : undefined;
+      const label = coerceFrontmatterValueToLabel(fmRecord?.[propertyKey]);
+      return label;
     }
 
-    if (this.plugin.settings.enableForGraphView) {
-      void this.overridePrototypes();
+    // mdx
+    const cached = frontmatterCache.getSync(file.path);
+    if (cached === undefined) {
+      // Kick off async load; refresh later once loaded.
+      this.scheduleMdxLoadAndRefresh(file, propertyKey);
+      return null;
+    }
+    const cachedRecord = cached && typeof cached === 'object' ? cached : undefined;
+    const label = coerceFrontmatterValueToLabel(cachedRecord?.[propertyKey]);
+    return label;
+  }
+
+  private ensureBasenameIndex(): void {
+    const mdxEnabled = this.plugin.settings.enableMdxSupport;
+    if (this.basenameIndexBuiltForMdxSupport === mdxEnabled && this.basenameIndex.size > 0) return;
+
+    this.basenameIndexBuiltForMdxSupport = mdxEnabled;
+    this.basenameIndex.clear();
+
+    const files = this.plugin.app.vault.getFiles();
+    for (const file of files) {
+      if (!(file instanceof TFile)) continue;
+      if (file.extension === 'md') {
+        if (!this.basenameIndex.has(file.basename)) this.basenameIndex.set(file.basename, file);
+        continue;
+      }
+      if (file.extension === 'mdx' && mdxEnabled) {
+        if (!this.basenameIndex.has(file.basename)) this.basenameIndex.set(file.basename, file);
+      }
+    }
+  }
+
+  private resolveFileFromNodeLabel(labelText: unknown): TFile | null {
+    if (typeof labelText !== 'string') return null;
+    const base = cleanLabelToBasename(labelText);
+    if (!isNonEmptyString(base)) return null;
+
+    this.ensureBasenameIndex();
+    return this.basenameIndex.get(base) ?? null;
+  }
+
+  private resolveFileFromNodeId(nodeId: unknown): TFile | null {
+    if (typeof nodeId !== 'string') return null;
+
+    const normalizedId = normalizeVaultPath(nodeId);
+    if (!isNonEmptyString(normalizedId)) return null;
+
+    const enableMdx = this.plugin.settings.enableMdxSupport;
+    const lower = normalizedId.toLowerCase();
+    const candidates = new Set<string>();
+    candidates.add(normalizedId);
+
+    if (lower.endsWith('.mdx')) {
+      if (!enableMdx) return null;
+      candidates.add(normalizedId);
+      candidates.add(normalizedId.slice(0, -4) + '.md');
+    } else if (lower.endsWith('.md')) {
+      candidates.add(normalizedId);
+      if (enableMdx) candidates.add(normalizedId.slice(0, -3) + '.mdx');
     } else {
-      this.restorePrototypes();
+      candidates.add(normalizedId + '.md');
+      if (enableMdx) candidates.add(normalizedId + '.mdx');
     }
+
+    for (const candidate of candidates) {
+      const file = this.plugin.app.vault.getAbstractFileByPath(candidate);
+      if (!(file instanceof TFile)) continue;
+      if (file.extension === 'md') return file;
+      if (file.extension === 'mdx' && enableMdx) return file;
+    }
+
+    // Last-resort: match by basename extracted from the node id.
+    const cleaned = normalizedId.split(/[/\\]/).pop() ?? normalizedId;
+    const base = stripMdExtension(cleaned);
+    if (!isNonEmptyString(base)) return null;
+    this.ensureBasenameIndex();
+    return this.basenameIndex.get(base) ?? null;
   }
 
-  refreshGraphView() {
-    if (this.plugin.settings.enableForGraphView) {
-      this.rewriteNames();
-    }
+  private scheduleMdxLoadAndRefresh(file: TFile, _key: string): void {
+    // Coalesce refreshes: multiple nodes can request the same MDX file.
+    if (this.pendingMdxRefreshPaths.has(file.path)) return;
+    this.pendingMdxRefreshPaths.add(file.path);
+
+    void frontmatterCache
+      .get(this.plugin.app, file, this.plugin.settings)
+      .catch(() => null)
+      .finally(() => {
+        // If multiple files resolve quickly, do a single refresh.
+        if (this.pendingMdxRefreshTimer) return;
+        this.pendingMdxRefreshTimer = window.setTimeout(() => {
+          this.pendingMdxRefreshTimer = undefined;
+          this.pendingMdxRefreshPaths.clear();
+          this.refreshGraphView();
+        }, 200);
+      });
   }
 
-  onunload() {
-    this.cleanupObserver();
-    this.restorePrototypes();
+  // --- Leaf helpers ---
+
+  private getGraphLeaves(): Array<{ leafType: GraphLeafType; leaf: unknown }> {
+    const out: Array<{ leafType: GraphLeafType; leaf: unknown }> = [];
+    const workspace = this.plugin.app.workspace as unknown as { getLeavesOfType?: (type: string) => unknown };
+
+    const graphLeavesUnknown = workspace.getLeavesOfType?.('graph');
+    const graphLeaves = Array.isArray(graphLeavesUnknown) ? graphLeavesUnknown : [];
+    for (const leaf of graphLeaves) out.push({ leafType: 'graph', leaf });
+
+    const localGraphLeavesUnknown = workspace.getLeavesOfType?.('localgraph');
+    const localGraphLeaves = Array.isArray(localGraphLeavesUnknown) ? localGraphLeavesUnknown : [];
+    for (const leaf of localGraphLeaves) out.push({ leafType: 'localgraph', leaf });
+
+    return out;
+  }
+
+  private pickAnyNode(nodes: unknown): GraphNode | null {
+    // Obsidian uses different internal structures across versions.
+    // Try common shapes: Map, Set, plain object, array-like.
+    try {
+      if (nodes instanceof Map) {
+        for (const v of nodes.values() as IterableIterator<unknown>) {
+          if (isGraphNode(v)) return v;
+        }
+      }
+      if (nodes instanceof Set) {
+        for (const v of nodes.values() as IterableIterator<unknown>) {
+          if (isGraphNode(v)) return v;
+        }
+      }
+      if (Array.isArray(nodes)) {
+        const first: unknown = (nodes as unknown[])[0];
+        return isGraphNode(first) ? first : null;
+      }
+      if (typeof nodes === 'object' && nodes) {
+        const values = Object.values(nodes as Record<string, unknown>);
+        const first = values[0];
+        return isGraphNode(first) ? first : null;
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  }
+}
+
+function normalizeVaultPath(raw: string): string {
+  let v = raw.trim();
+  if (v.startsWith('file://')) v = v.slice('file://'.length);
+  if (v.startsWith('vault://')) v = v.slice('vault://'.length);
+  if (v.startsWith('obsidian://')) v = v.slice('obsidian://'.length);
+  return v;
+}
+
+function stripMdExtension(path: string): string {
+  const lower = path.toLowerCase();
+  if (lower.endsWith('.mdx')) return path.slice(0, -4);
+  if (lower.endsWith('.md')) return path.slice(0, -3);
+  return path;
+}
+
+function cleanLabelToBasename(label: string): string {
+  const trimmed = label.trim();
+  const lastSegment = trimmed.split(/[/\\]/).pop() ?? trimmed;
+  return stripMdExtension(lastSegment);
+}
+
+function safeCall(fn: (this: GraphNode) => string, self: GraphNode): string {
+  try {
+    return fn.call(self);
+  } catch {
+    // As a last resort, use whatever we can find on node.text.
+    const direct = self?.text?.text;
+    return isNonEmptyString(direct) ? direct : '';
   }
 }
 

@@ -1,5 +1,5 @@
-import { Editor, EditorPosition, EditorSuggest, EditorSuggestContext, EditorSuggestTriggerInfo, MarkdownView, Notice, TFile, prepareFuzzySearch, prepareSimpleSearch, SearchResult, sortSearchResults } from 'obsidian';
-import { SuggestionItem, CachedFileData, EditorSuggestInternal, SearchMatchReason, PropertyOverFileNamePlugin, VaultInternal, QuickSwitcherPluginInstance, AppInternal, MetadataCacheInternal } from '../types';
+import { Editor, EditorPosition, EditorSuggest, EditorSuggestContext, EditorSuggestTriggerInfo, MarkdownView, Notice, TFile, prepareFuzzySearch, prepareSimpleSearch, SearchResult } from 'obsidian';
+import { SuggestionItem, CachedFileData, EditorSuggestInternal, SearchMatchReason, PropertyOverFileNamePlugin, VaultInternal, QuickSwitcherPluginInstance, AppInternal } from '../types';
 import { buildFileCache, isExcluded } from '../utils/search';
 
 export class LinkTitleSuggest extends EditorSuggest<SuggestionItem> {

@@ -77,12 +77,10 @@ Content...
 
 The tab renaming functionality is adapted from the [Title-only Tab](https://github.com/tristone13th/obsidian-title-only-tab) plugin by tristone13th, which is licensed under MIT. The code has been modified to integrate with this plugin and use the user-defined property key setting instead of the hardcoded "title" property.
 
-The graph view functionality is adapted from the [Node Masquerade](https://github.com/Kapirklaa/obsidian-node-masquerade) plugin by ElsaTam, which is also licensed under GPLv3. The code has been modified to integrate with this plugin and use the property key setting.
-
 The backlink service (for embedded backlinks, backlinks panel, and outgoing links), explorer service (for file explorer with folder note support), and window frame service (for browser window title bar) are adapted from the [Front Matter Title](https://github.com/snezhig/obsidian-front-matter-title) plugin by snezhig. The code has been modified to integrate with this plugin and use the user-defined property key setting instead of the hardcoded "title" property.
 
 ## License
 
-This project is licensed under the GNU General Public License v3.0 (GPLv3).
+This project is licensed under the MIT License.
 
 See [LICENSE](LICENSE) for the full license text.
