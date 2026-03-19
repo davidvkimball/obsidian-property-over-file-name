@@ -114,19 +114,85 @@ export class BacklinkService {
    * Extract file path from an element or its parent link
    */
   private extractFilePathFromElement(element: HTMLElement): TFile | null {
-    // Try data-path attribute first
-    const dataPath = element.getAttribute('data-path');
-    if (dataPath) {
-      const file = this.plugin.app.vault.getAbstractFileByPath(dataPath);
-      if (file instanceof TFile) {
-        return file;
+    const resolveFileFromPathLike = (rawPathLike: string): TFile | null => {
+      let value = rawPathLike.trim();
+      if (!value) return null;
+
+      // Strip hash/query fragments from href-like values
+      value = value.split('#')[0]?.split('?')[0] ?? value;
+
+      // Normalize common Obsidian URL-ish prefixes
+      if (value.startsWith('file://')) value = value.slice('file://'.length);
+      if (value.startsWith('vault://')) value = value.slice('vault://'.length);
+
+      // Handle app:// URLs by extracting pathname or `file` query param
+      if (value.startsWith('app://') || value.startsWith('http://') || value.startsWith('https://')) {
+        try {
+          const url = new URL(value);
+          const fileParam = url.searchParams.get('file');
+          if (fileParam) {
+            try {
+              value = decodeURIComponent(fileParam);
+            } catch {
+              value = fileParam;
+            }
+          } else if (url.pathname) {
+            value = url.pathname;
+          }
+        } catch {
+          // Best-effort fallback to path-like parsing below
+        }
       }
+
+      // Decode any percent-encoding (relative paths can still be encoded)
+      try {
+        value = decodeURIComponent(value);
+      } catch {
+        // ignore decode errors
+      }
+
+      // Vault paths shouldn't start with `/` for `getAbstractFileByPath()`
+      value = value.replace(/^\/+/, '');
+
+      const lower = value.toLowerCase();
+      const candidates: string[] = [];
+      candidates.push(value);
+
+      if (!lower.endsWith('.md') && !lower.endsWith('.mdx')) {
+        candidates.push(`${value}.md`);
+        if (this.plugin.settings.enableMdxSupport) {
+          candidates.push(`${value}.mdx`);
+        }
+      }
+
+      for (const candidate of candidates) {
+        const file = this.plugin.app.vault.getAbstractFileByPath(candidate);
+        if (file instanceof TFile) return file;
+      }
+
+      return null;
+    };
+
+    // Prefer data-path from the element or the closest ancestor.
+    const dataPathHost = element.closest('[data-path]') ?? element;
+    const dataPath = dataPathHost.getAttribute('data-path');
+    if (dataPath) {
+      const file = resolveFileFromPathLike(dataPath);
+      if (file) return file;
     }
 
     // Try to find a link element (parent or child)
     const link = element.closest('a') || element.querySelector('a');
     if (link) {
-      const href = link instanceof HTMLAnchorElement ? link.href : (link as Element).getAttribute('href');
+      const href = link.getAttribute('href') ?? (link instanceof HTMLAnchorElement ? link.href : null);
+
+      // Try data-href attribute (Obsidian sometimes uses this)
+      const dataHref = link.getAttribute('data-href');
+      if (dataHref) {
+        const file = resolveFileFromPathLike(dataHref);
+        if (file) return file;
+      }
+
       if (href) {
         // Try obsidian:// URL format
         if (href.startsWith('obsidian://')) {
@@ -134,46 +200,64 @@ export class BacklinkService {
             const url = new URL(href);
             const fileParam = url.searchParams.get('file');
             if (fileParam) {
-              const decodedPath = decodeURIComponent(fileParam);
-              const file = this.plugin.app.vault.getAbstractFileByPath(decodedPath + '.md');
-              if (file instanceof TFile) {
-                return file;
-              }
+              const decodedPath = (() => {
+                try {
+                  return decodeURIComponent(fileParam);
+                } catch {
+                  return fileParam;
+                }
+              })();
+              const file = resolveFileFromPathLike(decodedPath);
+              if (file) return file;
             }
           } catch {
             // Ignore URL parsing errors
           }
         }
 
-        // Try internal link format (e.g., #file/path/to/file)
-        const internalLinkMatch = href.match(/#file\/(.+)/);
+        // Try internal link format (e.g., ...#file/path/to/file)
+        const internalLinkMatch = href.match(/#file\/([^?#]+)/);
         if (internalLinkMatch) {
-          const filePath = decodeURIComponent(internalLinkMatch[1]);
-          const file = this.plugin.app.vault.getAbstractFileByPath(filePath);
-          if (file instanceof TFile) {
-            return file;
-          }
+          const filePath = (() => {
+            try {
+              return decodeURIComponent(internalLinkMatch[1]);
+            } catch {
+              return internalLinkMatch[1];
+            }
+          })();
+          const file = resolveFileFromPathLike(filePath);
+          if (file) return file;
         }
 
-        // Try data-href attribute (Obsidian sometimes uses this)
-        const dataHref = link.getAttribute('data-href');
-        if (dataHref) {
-          const file = this.plugin.app.vault.getAbstractFileByPath(dataHref);
-          if (file instanceof TFile) {
-            return file;
-          }
-        }
+        // Finally, treat the href itself as a vault path-like string.
+        const file = resolveFileFromPathLike(href);
+        if (file) return file;
       }
     }
 
-    // Try to match text content to a file basename
+    // Try to match text content to a file path/basename
     const textContent = element.textContent?.trim();
     if (textContent) {
-      // Try to find file by basename (without extension)
-      const allFiles = this.plugin.app.vault.getMarkdownFiles();
-      const matchingFile = allFiles.find(f => f.basename === textContent);
-      if (matchingFile) {
-        return matchingFile;
+      // If the text looks like a path, try resolving it directly first.
+      if (textContent.includes('/') || textContent.includes('\\')) {
+        const resolved = resolveFileFromPathLike(textContent);
+        if (resolved) return resolved;
+      }
+
+      // Otherwise treat it as a filename (with or without extension), and make collisions safe.
+      const cleaned = textContent.replace(/\.(mdx|md)$/i, '').split(/[/\\]/).pop() ?? textContent;
+      const basename = cleaned.trim();
+
+      if (basename) {
+        const allFiles = this.plugin.app.vault.getFiles().filter((f): f is TFile => {
+          if (!(f instanceof TFile)) return false;
+          if (f.extension === 'md') return true;
+          return this.plugin.settings.enableMdxSupport && f.extension === 'mdx';
+        });
+
+        const matchingFiles = allFiles.filter(f => f.basename === basename);
+        // If multiple files share the same basename (e.g. multiple `index.md`), don't guess.
+        if (matchingFiles.length === 1) return matchingFiles[0];
       }
     }
 
