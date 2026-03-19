@@ -173,12 +173,31 @@ export class BacklinkService {
       return null;
     };
 
-    // Prefer data-path from the element or the closest ancestor.
-    const dataPathHost = element.closest('[data-path]') ?? element;
-    const dataPath = dataPathHost.getAttribute('data-path');
-    if (dataPath) {
-      const file = resolveFileFromPathLike(dataPath);
+    // Prefer `data-path` from the element, any ancestor, or a descendant.
+    // Unlinked mentions sometimes render the filename text inside nested elements
+    // while the actual `data-path` lives elsewhere in the row.
+    const directDataPath = element.getAttribute('data-path');
+    if (directDataPath) {
+      const file = resolveFileFromPathLike(directDataPath);
       if (file) return file;
+    }
+
+    const ancestorWithDataPath = element.closest('[data-path]');
+    if (ancestorWithDataPath) {
+      const dataPath = ancestorWithDataPath.getAttribute('data-path');
+      if (dataPath) {
+        const file = resolveFileFromPathLike(dataPath);
+        if (file) return file;
+      }
+    }
+
+    const descendantWithDataPath = element.querySelector('[data-path]');
+    if (descendantWithDataPath instanceof HTMLElement) {
+      const dataPath = descendantWithDataPath.getAttribute('data-path');
+      if (dataPath) {
+        const file = resolveFileFromPathLike(dataPath);
+        if (file) return file;
+      }
     }
 
     // Try to find a link element (parent or child)
@@ -268,6 +287,33 @@ export class BacklinkService {
    * Update a backlink container by replacing file names with property titles
    */
   private updateBacklinkContainer(container: HTMLElement): void {
+    // Unlinked mentions are rendered as "search result match" spans and often do not
+    // include `data-path` for the target note. In that case, the match text is usually
+    // the backlinks target note's basename (e.g., `index`), so we can replace it using
+    // the active file's property title (collision-safe).
+    void (async () => {
+      const activeFile = this.plugin.app.workspace.getActiveFile();
+      if (!(activeFile instanceof TFile)) return;
+
+      const displayName = await this.getDisplayName(activeFile);
+      if (displayName === null) return; // property missing -> keep Obsidian default text
+
+      const activeBasename = activeFile.basename;
+
+      // Replace only the exact matched token.
+      const matchTextEls = Array.from(
+        container.querySelectorAll<HTMLElement>('.search-result-file-matched-text')
+      );
+
+      for (const el of matchTextEls) {
+        const t = el.textContent?.trim();
+        if (!t) continue;
+        if (t === activeBasename || t === `${activeBasename}.md` || t === `${activeBasename}.mdx`) {
+          el.textContent = displayName;
+        }
+      }
+    })();
+
     // Find all potential file name elements in the container
     // Obsidian uses various selectors for backlink items
     const selectors = [
@@ -328,50 +374,75 @@ export class BacklinkService {
       const currentText = element.textContent?.trim() || '';
       const basename = file.basename;
 
-      // Only update if the current text matches the basename or file name
-      // This prevents overwriting custom text that might already be set
-      if (currentText === basename || currentText === file.name || currentText.endsWith(basename)) {
-        // Find the link element (if any)
-        const link = element.closest('a') || element.querySelector('a');
-        const targetElement = link || element;
+      const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-        // Try to preserve the structure while updating text
-        // Look for text nodes or elements that contain the file name
-        const updateTextInElement = (el: HTMLElement) => {
-          // Check if element has a single text node child
-          if (el.childNodes.length === 1 && el.childNodes[0].nodeType === Node.TEXT_NODE) {
-            el.textContent = displayName;
-            return true;
-          }
+      // Only touch text when it contains the note's basename or filename token(s).
+      // For unlinked mentions, Obsidian often renders the basename inside a larger snippet,
+      // so we do safe in-text token replacement instead of requiring exact equality.
+      const escapedBasename = escapeRegExp(basename);
+      const escapedFileName = escapeRegExp(file.name);
 
-          // Look for text nodes
-          const textNodes = Array.from(el.childNodes).filter(node => node.nodeType === Node.TEXT_NODE);
-          if (textNodes.length > 0) {
-            // Update the first text node
-            textNodes[0].textContent = displayName;
-            // Remove other text nodes to avoid duplication
-            for (let i = 1; i < textNodes.length; i++) {
-              textNodes[i].remove();
+      // Replace bare basename when it's surrounded by non-alphanumeric chars and NOT followed by a dot
+      // (avoids turning `index.html` into `Sample Folder-Based Post.html`).
+      const bareBasenameTest = new RegExp(`(^|[^A-Za-z0-9])${escapedBasename}(?!\\\\.)(?=([^A-Za-z0-9]|$))`, 'i');
+      const bareBasenameGlobal = new RegExp(`(^|[^A-Za-z0-9])${escapedBasename}(?!\\\\.)([^A-Za-z0-9]|$)`, 'gi');
+      const fileNameGlobal = new RegExp(escapedFileName, 'g');
+
+      const shouldUpdate =
+        currentText.includes(file.name) ||
+        bareBasenameTest.test(currentText) ||
+        currentText.includes(`${basename}.md`) ||
+        currentText.includes(`${basename}.mdx`);
+
+      if (!shouldUpdate) return;
+
+      const link = element.closest('a') || element.querySelector('a');
+      const targetElement = link || element;
+
+      const updateTextInElement = (el: HTMLElement): boolean => {
+        if (!el) return false;
+        let changed = false;
+
+        try {
+          const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+          let n: Node | null = walker.nextNode();
+          while (n) {
+            const textNode = n as Text;
+            const before = textNode.textContent ?? '';
+            if (!before) {
+              n = walker.nextNode();
+              continue;
             }
-            return true;
-          }
 
-          // If no text nodes, check if we should replace all content
-          // Only do this if the element's text matches the file name
-          if (el.textContent?.trim() === basename || el.textContent?.trim() === file.name) {
-            el.textContent = displayName;
-            return true;
-          }
+            let after = before;
 
+            // Replace explicit filename first (e.g. `index.md` / `index.mdx`).
+            if (after.includes(file.name)) {
+              after = after.replace(fileNameGlobal, displayName);
+            }
+
+            // Replace bare basename tokens (e.g. `/index`, `_index_`, `index)`).
+            after = after.replace(bareBasenameGlobal, (_match, p1: string, p2: string) => {
+              // p2 is either a delimiter char or empty at end
+              return `${p1}${displayName}${p2 ?? ''}`;
+            });
+
+            if (after !== before) {
+              textNode.textContent = after;
+              changed = true;
+            }
+
+            n = walker.nextNode();
+          }
+        } catch {
+          // Best-effort: don't block other processing if DOM traversal fails
           return false;
-        };
-
-        // Try to update the link first, then fall back to element
-        if (!updateTextInElement(targetElement)) {
-          // If link update failed, try the element itself
-          updateTextInElement(element);
         }
-      }
+
+        return changed;
+      };
+
+      updateTextInElement(targetElement);
     })();
   }
 
@@ -449,18 +520,7 @@ export class BacklinkService {
         // Also try to update immediately if we can extract the file
         const file = this.extractFilePathFromElement(el);
         if (file && file instanceof TFile) {
-          void (async () => {
-            const displayName = await this.getDisplayName(file);
-            if (displayName) {
-              // Check current text and replace if it's the filename
-              const currentText = el.textContent?.trim() || '';
-              if (currentText === file.basename || currentText === file.name) {
-                el.textContent = displayName;
-                el.setAttribute('data-pov-processed', 'true');
-                this.processedElements.add(el);
-              }
-            }
-          })();
+          this.updateElementWithFile(el, file);
         }
       });
 
