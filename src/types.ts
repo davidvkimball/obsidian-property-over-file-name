@@ -12,6 +12,7 @@ export interface PluginSettings {
   useSimpleSearch: boolean;
   enableForGraphView: boolean;
   enableForBacklinks: boolean;
+  hideUnlinkedMentionsInBacklinks: boolean;
   enableForTabs: boolean;
   enableForExplorer: boolean;
   folderNoteFilename: string;

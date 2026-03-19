@@ -10,6 +10,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   useSimpleSearch: false,
   enableForGraphView: true,
   enableForBacklinks: true,
+  hideUnlinkedMentionsInBacklinks: false,
   enableForTabs: true,
   enableForExplorer: false,
   folderNoteFilename: '',

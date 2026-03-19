@@ -15,6 +15,8 @@ export class BacklinkService {
   private processedElements: WeakSet<HTMLElement> = new WeakSet();
   private modifiedElements: WeakSet<HTMLElement> = new WeakSet();
   private originalTextContentDescriptors: Map<HTMLElement, PropertyDescriptor> = new Map();
+  private linkedTitleAssignedSourcePath: WeakMap<HTMLElement, string> = new WeakMap();
+  private linkedTitlesForTargetPath: string | null = null;
 
   constructor(plugin: PropertyOverFileNamePlugin) {
     this.plugin = plugin;
@@ -200,6 +202,36 @@ export class BacklinkService {
       }
     }
 
+    // If we're inside a backlinks search row, try to resolve from any `data-path`
+    // within that row. This avoids guessing from basename like `index`.
+    const searchResult = element.closest('.search-result');
+    if (searchResult) {
+      const rowDataPathEl = searchResult.querySelector('[data-path]');
+      if (rowDataPathEl instanceof HTMLElement) {
+        const dataPath = rowDataPathEl.getAttribute('data-path');
+        if (dataPath) {
+          const file = resolveFileFromPathLike(dataPath);
+          if (file) return file;
+        }
+      }
+
+      // Try anchors inside the same row (linked mentions typically have an `<a>` with the target path).
+      const anchors = Array.from(searchResult.querySelectorAll<HTMLAnchorElement>('a[href], a[data-href]'));
+      for (const a of anchors) {
+        const dataHref = a.getAttribute('data-href');
+        if (dataHref) {
+          const file = resolveFileFromPathLike(dataHref);
+          if (file) return file;
+        }
+
+        const href = a.getAttribute('href');
+        if (href) {
+          const file = resolveFileFromPathLike(href);
+          if (file) return file;
+        }
+      }
+    }
+
     // Try to find a link element (parent or child)
     const link = element.closest('a') || element.querySelector('a');
     if (link) {
@@ -280,6 +312,28 @@ export class BacklinkService {
       }
     }
 
+    // If we still couldn't resolve, try using the surrounding search-result row.
+    // For linked mentions, Obsidian often renders the "file title" as just the basename
+    // (e.g. `index`) without `data-path`, but the same row's match snippet usually includes
+    // the target note's path (e.g. `posts/some-post/index.md`).
+    const searchResultRow = element.closest('.search-result');
+    if (searchResultRow) {
+      const rowText = searchResultRow.textContent ?? '';
+      // Capture likely vault file paths inside markdown-like text: `(.../index.md#anchor)`
+      // We only accept paths that appear *inside markdown link parentheses*,
+      // e.g. `[Title](posts/some-post/index.md)` -> capture `posts/some-post/index.md`.
+      const mdParenPathRegex = /\(([^)]*?\.(?:md|mdx)(?:[#?][^)]*)?)\)/gi;
+      let match: RegExpExecArray | null = null;
+      while ((match = mdParenPathRegex.exec(rowText)) !== null) {
+        const candidate = match[1];
+        if (!candidate) continue;
+        // Avoid resolving real URLs like `(http://.../file.md)`
+        if (candidate.includes('://')) continue;
+        const resolved = resolveFileFromPathLike(candidate);
+        if (resolved) return resolved;
+      }
+    }
+
     return null;
   }
 
@@ -287,32 +341,96 @@ export class BacklinkService {
    * Update a backlink container by replacing file names with property titles
    */
   private updateBacklinkContainer(container: HTMLElement): void {
-    // Unlinked mentions are rendered as "search result match" spans and often do not
-    // include `data-path` for the target note. In that case, the match text is usually
-    // the backlinks target note's basename (e.g., `index`), so we can replace it using
-    // the active file's property title (collision-safe).
+    // --- Linked mentions: data-driven source resolution ---
+    // The backlinks pane groups results by *source file*. For folder-note setups (many `index.md`),
+    // DOM-only resolution can be ambiguous. Use `metadataCache.resolvedLinks` to find the source
+    // paths that link to the active file, then assign those paths to the visible linked-mention
+    // title rows (best-effort matching to the current UI order).
     void (async () => {
       const activeFile = this.plugin.app.workspace.getActiveFile();
       if (!(activeFile instanceof TFile)) return;
 
-      const displayName = await this.getDisplayName(activeFile);
-      if (displayName === null) return; // property missing -> keep Obsidian default text
+      // Reset assignments when switching target note.
+      if (this.linkedTitlesForTargetPath !== activeFile.path) {
+        this.linkedTitlesForTargetPath = activeFile.path;
+        this.linkedTitleAssignedSourcePath = new WeakMap();
+      }
 
-      const activeBasename = activeFile.basename;
+      const resolvedLinks = this.plugin.app.metadataCache.resolvedLinks;
+      const sources: string[] = [];
+      for (const [sourcePath, dests] of Object.entries(resolvedLinks)) {
+        if (!dests || typeof dests !== 'object') continue;
+        if (Object.prototype.hasOwnProperty.call(dests, activeFile.path)) {
+          sources.push(sourcePath);
+        }
+      }
+      if (sources.length === 0) return;
 
-      // Replace only the exact matched token.
-      const matchTextEls = Array.from(
-        container.querySelectorAll<HTMLElement>('.search-result-file-matched-text')
-      );
+      // Deterministic order to reduce churn across refreshes.
+      sources.sort((a, b) => a.localeCompare(b));
 
-      for (const el of matchTextEls) {
-        const t = el.textContent?.trim();
-        if (!t) continue;
-        if (t === activeBasename || t === `${activeBasename}.md` || t === `${activeBasename}.mdx`) {
+      const linkedHeaders = Array.from(container.querySelectorAll<HTMLElement>('.tree-item-self'))
+        .filter(h => (h.querySelector('.tree-item-inner')?.textContent ?? '').trim() === 'Linked mentions');
+
+      for (const header of linkedHeaders) {
+        const sibling = header.nextElementSibling;
+        if (!(sibling instanceof HTMLElement)) continue;
+        if (!sibling.classList.contains('search-result-container')) continue;
+
+        const titleEls = Array.from(
+          sibling.querySelectorAll<HTMLElement>('.search-result-file-title .tree-item-inner')
+        );
+        if (titleEls.length === 0) continue;
+
+        // Assign in order, but keep stable per element once assigned.
+        let nextIdx = 0;
+        for (const el of titleEls) {
+          const already = this.linkedTitleAssignedSourcePath.get(el);
+          const sourcePath = already ?? sources[nextIdx++];
+          if (!sourcePath) continue;
+          if (!already) this.linkedTitleAssignedSourcePath.set(el, sourcePath);
+
+          const file = this.plugin.app.vault.getAbstractFileByPath(sourcePath);
+          if (!(file instanceof TFile)) continue;
+
+          const displayName = await this.getDisplayName(file);
+          if (displayName === null) continue;
+
+          // Always set when we have a resolved source file; this avoids cases where Obsidian
+          // shows a plausible-but-wrong title due to basename collisions (e.g., many `index.md`).
           el.textContent = displayName;
         }
       }
     })();
+
+    // Keep hide/show logic deterministic for both:
+    // - dedicated backlinks side panel
+    // - embedded backlinks at bottom of notes
+    const applyUnlinkedVisibility = (hide: boolean): void => {
+      // First, restore anything we previously hid so toggling OFF works immediately.
+      const previouslyHidden = container.querySelectorAll<HTMLElement>('[data-pov-unlinked-hidden="true"]');
+      previouslyHidden.forEach(el => {
+        el.style.removeProperty('display');
+        el.removeAttribute('data-pov-unlinked-hidden');
+      });
+
+      if (!hide) return;
+
+      const headers = Array.from(container.querySelectorAll<HTMLElement>('.tree-item-self'))
+        .filter(h => (h.querySelector('.tree-item-inner')?.textContent ?? '').trim() === 'Unlinked mentions');
+
+      for (const header of headers) {
+        header.style.setProperty('display', 'none', 'important');
+        header.setAttribute('data-pov-unlinked-hidden', 'true');
+
+        const sibling = header.nextElementSibling;
+        if (sibling instanceof HTMLElement && sibling.classList.contains('search-result-container')) {
+          sibling.style.setProperty('display', 'none', 'important');
+          sibling.setAttribute('data-pov-unlinked-hidden', 'true');
+        }
+      }
+    };
+    applyUnlinkedVisibility(this.plugin.settings.hideUnlinkedMentionsInBacklinks);
 
     // Find all potential file name elements in the container
     // Obsidian uses various selectors for backlink items
@@ -346,12 +464,91 @@ export class BacklinkService {
         return;
       }
 
+      if (this.plugin.settings.hideUnlinkedMentionsInBacklinks) {
+        const hiddenContainer = element.closest('.search-result-container') as HTMLElement | null;
+        if (hiddenContainer && hiddenContainer.style.display === 'none') return;
+      }
+
       // Extract file from element
       const file = this.extractFilePathFromElement(element);
       if (file && file instanceof TFile) {
         this.updateElementWithFile(element, file);
       }
     });
+
+    // Unlinked mentions: Obsidian uses the note basename as the search term.
+    // For folder notes (`index.md`), this is meaningless. Replace the highlighted match
+    // token (`index`) with the active note's configured property title, but only within
+    // the "Unlinked mentions" section to avoid affecting linked mentions.
+    void (async () => {
+      const activeFile = this.plugin.app.workspace.getActiveFile();
+      if (!(activeFile instanceof TFile)) return;
+
+      const displayName = await this.getDisplayName(activeFile);
+      if (displayName === null) return;
+
+      const basename = activeFile.basename;
+      if (!basename) return;
+
+      // Locate "Unlinked mentions" section header(s) and operate only on their following results container.
+      const headers = Array.from(container.querySelectorAll<HTMLElement>('.tree-item-self'))
+        .filter(h => (h.querySelector('.tree-item-inner')?.textContent ?? '').trim() === 'Unlinked mentions');
+
+      for (const header of headers) {
+        // The unlinked results container typically follows the header.
+        const sibling = header.nextElementSibling;
+        if (!(sibling instanceof HTMLElement)) continue;
+        if (!sibling.classList.contains('search-result-container')) continue;
+
+        const matchEls = Array.from(sibling.querySelectorAll<HTMLElement>('.search-result-file-matched-text'));
+        for (const el of matchEls) {
+          const t = (el.textContent ?? '').trim();
+          if (!t) continue;
+          if (t === basename || t === `${basename}.md` || t === `${basename}.mdx`) {
+            el.textContent = displayName;
+          }
+        }
+      }
+    })();
+
+    // Unlinked mentions: their visible "file title" often shows basename (e.g. `index`)
+    // without `data-path`, so we can't reliably resolve the target file from the header alone.
+    // However, the match snippet highlights the target note's property title as
+    // `.search-result-file-matched-text`.
+    //
+    // Strategy:
+    // - For rows where the header is still `index` (basename), and
+    // - the row is "unlinked" (matched text does NOT include `.md`/`.mdx` link paths),
+    // - set the header to the longest highlighted matched text.
+    const titleEls = Array.from(
+      container.querySelectorAll<HTMLElement>('.search-result-file-title .tree-item-inner')
+    );
+
+    for (const el of titleEls) {
+      const headerText = el.textContent?.trim() || '';
+      if (headerText.toLowerCase() !== 'index') continue;
+
+      const row = el.closest('.search-result');
+      if (!row) continue;
+
+      const matchedTexts = Array.from(
+        row.querySelectorAll<HTMLElement>('.search-result-file-matched-text')
+      )
+        .map(s => (s.textContent ?? '').trim())
+        .filter(Boolean);
+
+      if (matchedTexts.length === 0) continue;
+
+      // Linked rows embed markdown like `[Title](posts/.../index.md...)` in the matched span.
+      const isLinkedRow = matchedTexts.some(t => t.includes('.md') || t.includes('.mdx') || t.includes(']('));
+      if (isLinkedRow) continue;
+
+      const best = matchedTexts.reduce((acc, t) => (t.length > acc.length ? t : acc), '');
+      if (!best) continue;
+      if (best.toLowerCase() === 'index') continue;
+
+      el.textContent = best;
+    }
   }
 
   /**

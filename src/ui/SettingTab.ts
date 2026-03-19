@@ -161,6 +161,21 @@ export class SettingTab extends PluginSettingTab {
 
     generalGroup.addSetting(setting => {
       setting
+        .setName('Hide unlinked mentions (backlinks panel)')
+        .setDesc('Hide the “Unlinked mentions” section in the backlinks panel and skip processing it. Useful for folder-note setups where file names like `index` make unlinked mentions noisy.')
+        .addToggle(toggle =>
+          toggle
+            .setValue(this.plugin.settings.hideUnlinkedMentionsInBacklinks)
+            .onChange(async value => {
+              this.plugin.settings.hideUnlinkedMentionsInBacklinks = value;
+              await this.plugin.saveData(this.plugin.settings);
+              this.plugin.updateBacklinks();
+            })
+        );
+    });
+
+    generalGroup.addSetting(setting => {
+      setting
         .setName('In tab titles')
         .setDesc('Use the property instead of the file name in tab titles.')
         .addToggle(toggle =>
