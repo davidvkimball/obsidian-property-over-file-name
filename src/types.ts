@@ -18,6 +18,7 @@ export interface PluginSettings {
   folderNoteFilename: string;
   enableForWindowFrame: boolean;
   enableForBookmarks: boolean;
+  enableForProperties: boolean;
   enableMdxSupport: boolean;
   quickSwitcherExcludedBehavior: ExcludedFilesBehavior;
   linkSuggesterExcludedBehavior: ExcludedFilesBehavior;
@@ -124,6 +125,7 @@ export interface PropertyOverFileNamePlugin extends Plugin {
   updateExplorer(): void;
   updateWindowFrame(): void;
   updateBookmarks(): void;
+  updateProperties(): void;
   rebuildCache(): void;
   saveSettings(prevQuickSwitcherState?: boolean, prevTabState?: boolean): Promise<void>;
   saveData(data: PluginSettings): Promise<void>;

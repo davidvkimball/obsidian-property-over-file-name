@@ -75,6 +75,21 @@ export class SettingTab extends PluginSettingTab {
 
     generalGroup.addSetting(setting => {
       setting
+        .setName('In properties')
+        .setDesc('Enable property-based titles in the property link suggester.')
+        .addToggle(toggle =>
+          toggle
+            .setValue(this.plugin.settings.enableForProperties)
+            .onChange(async value => {
+              this.plugin.settings.enableForProperties = value;
+              await this.plugin.saveData(this.plugin.settings);
+              this.plugin.updateProperties();
+            })
+        );
+    });
+
+    generalGroup.addSetting(setting => {
+      setting
         .setName('Include file name in fuzzy searches')
         .setDesc('Include note file names in fuzzy search results for link suggester and quick switcher.')
         .addToggle(toggle =>

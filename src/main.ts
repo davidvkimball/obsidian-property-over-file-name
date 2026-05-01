@@ -13,6 +13,7 @@ import { TabService } from './services/TabService';
 import { ExplorerService } from './services/ExplorerService';
 import { WindowFrameService } from './services/WindowFrameService';
 import { BookmarkService } from './services/BookmarkService';
+import { PropertiesService } from './services/PropertiesService';
 import { frontmatterCache } from './utils/frontmatter-cache';
 
 export default class PropertyOverFileNamePlugin extends Plugin {
@@ -27,6 +28,7 @@ export default class PropertyOverFileNamePlugin extends Plugin {
   private explorerService!: ExplorerService;
   private windowFrameService!: WindowFrameService;
   private bookmarkService!: BookmarkService;
+  private propertiesService!: PropertiesService;
 
   constructor(app: App, manifest: PluginManifest) {
     super(app, manifest);
@@ -75,6 +77,7 @@ export default class PropertyOverFileNamePlugin extends Plugin {
     this.explorerService = new ExplorerService(this);
     this.windowFrameService = new WindowFrameService(this);
     this.bookmarkService = new BookmarkService(this);
+    this.propertiesService = new PropertiesService(this);
 
     // Register tab service events and rename tabs immediately
     this.tabService.registerEvents();
@@ -109,6 +112,7 @@ export default class PropertyOverFileNamePlugin extends Plugin {
       this.updateExplorer();
       this.updateWindowFrame();
       this.updateBookmarks();
+      this.updateProperties();
     }, 1000);
 
     // Set up graph view handling
@@ -119,6 +123,7 @@ export default class PropertyOverFileNamePlugin extends Plugin {
       this.updateExplorer();
       this.updateWindowFrame();
       this.updateBookmarks();
+      this.updateProperties();
       // Also refresh graph view to ensure it's updated
       setTimeout(() => {
         this.graphViewService.refreshGraphView();
@@ -282,6 +287,10 @@ export default class PropertyOverFileNamePlugin extends Plugin {
     this.bookmarkService.updateBookmarks();
   }
 
+  updateProperties() {
+    this.propertiesService.updateProperties();
+  }
+
   rebuildCache() {
     this.cacheService.rebuildCache();
   }
@@ -313,6 +322,9 @@ export default class PropertyOverFileNamePlugin extends Plugin {
 
     // Clean up bookmarks service
     this.bookmarkService.onunload();
+
+    // Clean up properties service
+    this.propertiesService.onunload();
   }
 
   async loadSettings() {

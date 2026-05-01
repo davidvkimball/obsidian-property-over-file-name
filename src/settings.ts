@@ -16,6 +16,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   folderNoteFilename: '',
   enableForWindowFrame: true,
   enableForBookmarks: true,
+  enableForProperties: true,
   enableMdxSupport: false,
   quickSwitcherExcludedBehavior: 'deemphasize',
   linkSuggesterExcludedBehavior: 'deemphasize',

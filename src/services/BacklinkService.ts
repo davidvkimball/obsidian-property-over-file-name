@@ -408,9 +408,9 @@ export class BacklinkService {
     // - embedded backlinks at bottom of notes
     const applyUnlinkedVisibility = (hide: boolean): void => {
       // First, restore anything we previously hid so toggling OFF works immediately.
-      const previouslyHidden = container.querySelectorAll<HTMLElement>('[data-pov-unlinked-hidden="true"]');
+      const previouslyHidden = container.querySelectorAll<HTMLElement>('.pov-hidden[data-pov-unlinked-hidden="true"]');
       previouslyHidden.forEach(el => {
-        el.style.removeProperty('display');
+        el.removeClass('pov-hidden');
         el.removeAttribute('data-pov-unlinked-hidden');
       });
 
@@ -420,12 +420,12 @@ export class BacklinkService {
         .filter(h => (h.querySelector('.tree-item-inner')?.textContent ?? '').trim() === 'Unlinked mentions');
 
       for (const header of headers) {
-        header.style.setProperty('display', 'none', 'important');
+        header.addClass('pov-hidden');
         header.setAttribute('data-pov-unlinked-hidden', 'true');
 
         const sibling = header.nextElementSibling;
         if (sibling instanceof HTMLElement && sibling.classList.contains('search-result-container')) {
-          sibling.style.setProperty('display', 'none', 'important');
+          sibling.addClass('pov-hidden');
           sibling.setAttribute('data-pov-unlinked-hidden', 'true');
         }
       }
@@ -465,8 +465,8 @@ export class BacklinkService {
       }
 
       if (this.plugin.settings.hideUnlinkedMentionsInBacklinks) {
-        const hiddenContainer = element.closest('.search-result-container') as HTMLElement | null;
-        if (hiddenContainer && hiddenContainer.style.display === 'none') return;
+        const hiddenContainer = element.closest('.search-result-container');
+        if (hiddenContainer instanceof HTMLElement && hiddenContainer.classList.contains('pov-hidden')) return;
       }
 
       // Extract file from element
