@@ -19,6 +19,17 @@ export class WindowFrameService {
   }
 
   /**
+   * Returns the Document for the main Obsidian window. We need this (not the
+   * bare `document` global and not `activeDocument`, which follows whichever
+   * popout is focused) so that writing to `.title` updates the OS title of the
+   * main app window. Obsidian exposes `workspace.rootSplit.doc` for exactly
+   * this purpose.
+   */
+  private getMainDocument(): Document {
+    return this.plugin.app.workspace.rootSplit.doc;
+  }
+
+  /**
    * Get the title for the active file
    */
   private getActiveFileTitle(): string {
@@ -33,7 +44,7 @@ export class WindowFrameService {
         }
         return activeFile.basename;
       }
-      
+
       // For MDX files, trigger async read and return filename for now
       // The title will update once the cache is populated
       if (activeFile.extension === 'mdx' && this.plugin.settings.enableMdxSupport) {
@@ -43,19 +54,18 @@ export class WindowFrameService {
           if (propertyValue) {
             // Update title asynchronously
             const app = this.plugin.app as { getAppTitle?: (title: string) => string };
+            const mainDoc = this.getMainDocument();
             if (typeof app.getAppTitle === 'function') {
-              // eslint-disable-next-line obsidianmd/prefer-active-doc -- We always want the main app window's title, not whatever popout currently has focus.
-              document.title = app.getAppTitle(String(propertyValue));
+              mainDoc.title = app.getAppTitle(String(propertyValue));
             } else {
               const vaultName = this.plugin.app.vault.getName();
-              // eslint-disable-next-line obsidianmd/prefer-active-doc -- We always want the main app window's title, not whatever popout currently has focus.
-              document.title = `${String(propertyValue)} - ${vaultName}`;
+              mainDoc.title = `${String(propertyValue)} - ${vaultName}`;
             }
           }
         })();
         return activeFile.basename; // Return filename immediately, will update async
       }
-      
+
       return activeFile.basename;
     }
     return '';
@@ -77,14 +87,13 @@ export class WindowFrameService {
       // Get the app title format (usually "Title - Vault Name")
       // Try to use Obsidian's getAppTitle method if available
       const app = this.plugin.app as { getAppTitle?: (title: string) => string };
+      const mainDoc = this.getMainDocument();
       if (typeof app.getAppTitle === 'function') {
-        // eslint-disable-next-line obsidianmd/prefer-active-doc -- We always want the main app window's title, not whatever popout currently has focus.
-        document.title = app.getAppTitle(title);
+        mainDoc.title = app.getAppTitle(title);
       } else {
         // Fallback: format manually
         const vaultName = this.plugin.app.vault.getName();
-        // eslint-disable-next-line obsidianmd/prefer-active-doc -- We always want the main app window's title, not whatever popout currently has focus.
-        document.title = `${title} - ${vaultName}`;
+        mainDoc.title = `${title} - ${vaultName}`;
       }
     } else {
       // Fallback to original behavior
