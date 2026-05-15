@@ -44,10 +44,12 @@ export class WindowFrameService {
             // Update title asynchronously
             const app = this.plugin.app as { getAppTitle?: (title: string) => string };
             if (typeof app.getAppTitle === 'function') {
-              activeDocument.title = app.getAppTitle(String(propertyValue));
+              // eslint-disable-next-line obsidianmd/prefer-active-doc -- We always want the main app window's title, not whatever popout currently has focus.
+              document.title = app.getAppTitle(String(propertyValue));
             } else {
               const vaultName = this.plugin.app.vault.getName();
-              activeDocument.title = `${String(propertyValue)} - ${vaultName}`;
+              // eslint-disable-next-line obsidianmd/prefer-active-doc -- We always want the main app window's title, not whatever popout currently has focus.
+              document.title = `${String(propertyValue)} - ${vaultName}`;
             }
           }
         })();
@@ -76,11 +78,13 @@ export class WindowFrameService {
       // Try to use Obsidian's getAppTitle method if available
       const app = this.plugin.app as { getAppTitle?: (title: string) => string };
       if (typeof app.getAppTitle === 'function') {
-        activeDocument.title = app.getAppTitle(title);
+        // eslint-disable-next-line obsidianmd/prefer-active-doc -- We always want the main app window's title, not whatever popout currently has focus.
+        document.title = app.getAppTitle(title);
       } else {
         // Fallback: format manually
         const vaultName = this.plugin.app.vault.getName();
-        activeDocument.title = `${title} - ${vaultName}`;
+        // eslint-disable-next-line obsidianmd/prefer-active-doc -- We always want the main app window's title, not whatever popout currently has focus.
+        document.title = `${title} - ${vaultName}`;
       }
     } else {
       // Fallback to original behavior
