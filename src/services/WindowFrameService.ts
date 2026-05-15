@@ -5,44 +5,54 @@ import { getFrontmatter } from '../utils/frontmatter';
 /**
  * Window Frame Service
  *
- * Handles displaying property-based title in the browser window title bar.
- * Overrides workspace.updateTitle() to use the frontmatter property instead
- * of the file name.
+ * Writes the active file's `title` (or configured) property to the OS window
+ * title bar. We do NOT rely on overriding `workspace.updateTitle` — that's an
+ * undocumented internal that has come and gone across Obsidian versions, and
+ * when it isn't there our writes never ran. Instead we listen to the events
+ * that Obsidian's own title logic fires off, compute our title, and write it
+ * directly to `workspace.rootSplit.doc.title`. A short deferred re-write
+ * guards against Obsidian's internal handler running synchronously *after*
+ * ours and overwriting back to the filename.
  */
 export class WindowFrameService {
   private plugin: PropertyOverFileNamePlugin;
-  private originalUpdateTitle: (() => void) | null = null;
   private enabled: boolean = false;
+  private eventsRegistered: boolean = false;
+
   /**
-   * Per-file path → last property-based title we resolved for it. Used so a
-   * transient cache miss (e.g. right after Obsidian focuses the window before
-   * the metadata cache has settled) doesn't downgrade a correct title back to
+   * Last property-based title we resolved, keyed by file path. Used so a
+   * transient `getFileCache` miss can't downgrade a correct title back to
    * the filename.
    */
   private lastKnownTitles: Map<string, string> = new Map();
-  private eventsRegistered: boolean = false;
-  private retryTimer: number | null = null;
+
+  /** Pending deferred re-write timer (debounced). */
+  private deferredTimer: number | null = null;
+
+  /**
+   * Legacy override of `workspace.updateTitle`. We keep this for older
+   * Obsidian versions that do still call into it (defense in depth) but the
+   * event-driven path is what makes the feature actually work.
+   */
+  private originalUpdateTitle: (() => void) | null = null;
 
   constructor(plugin: PropertyOverFileNamePlugin) {
     this.plugin = plugin;
   }
 
   /**
-   * Returns the Document for the main Obsidian window. We need this (not the
-   * bare `document` global and not `activeDocument`, which follows whichever
-   * popout is focused) so that writing to `.title` updates the OS title of the
-   * main app window. Obsidian exposes `workspace.rootSplit.doc` for exactly
-   * this purpose.
+   * Returns the Document for the main Obsidian window. Obsidian exposes
+   * `workspace.rootSplit.doc` for exactly this purpose — using bare
+   * `document` would be flagged by the popout-window lint, and
+   * `activeDocument` would follow whatever popout has focus.
    */
   private getMainDocument(): Document {
     return this.plugin.app.workspace.rootSplit.doc;
   }
 
   /**
-   * Get the title for the active file. Returns an empty string if no file is
-   * active, the basename if the property isn't available, or the property
-   * value when it is. Property hits are cached per file path so a later
-   * cache-miss (returns null) doesn't blow away a previously-correct title.
+   * Resolve the title text for the currently active file. Returns '' if
+   * there's no active file or we don't want to touch the title.
    */
   private getActiveFileTitle(): string {
     const activeFile = this.plugin.app.workspace.getActiveFile();
@@ -57,24 +67,16 @@ export class WindowFrameService {
         this.lastKnownTitles.set(activeFile.path, String(propertyValue));
         return String(propertyValue);
       }
-      // Cache miss: prefer a previously-resolved good value over the filename
-      // so a transient null doesn't reset the OS title to the slug.
+      // Prefer a previously-resolved good value so a transient cache miss
+      // doesn't reset the OS title to the slug.
       const remembered = this.lastKnownTitles.get(activeFile.path);
-      if (remembered) {
-        // Schedule a refresh in case the property has genuinely been cleared.
-        this.scheduleRetry();
-        return remembered;
-      }
-      // First time seeing this file and the cache is empty. Schedule a retry
-      // and return the basename for now.
-      this.scheduleRetry();
+      if (remembered) return remembered;
       return activeFile.basename;
     }
 
     if (activeFile.extension === 'mdx' && this.plugin.settings.enableMdxSupport) {
       const remembered = this.lastKnownTitles.get(activeFile.path);
       if (remembered) {
-        // Keep the cache fresh in the background, but return the good value now.
         void this.refreshMdxTitle(activeFile);
         return remembered;
       }
@@ -85,11 +87,7 @@ export class WindowFrameService {
     return activeFile.basename;
   }
 
-  /**
-   * Async helper for the MDX path: read the file, cache the property value if
-   * we find one, then trigger another title update so the window picks up the
-   * fresh value.
-   */
+  /** MDX needs an async file read; cache the resolved value for next time. */
   private async refreshMdxTitle(file: TFile): Promise<void> {
     try {
       const frontmatter = await getFrontmatter(this.plugin.app, file, this.plugin.settings);
@@ -98,7 +96,7 @@ export class WindowFrameService {
         const prev = this.lastKnownTitles.get(file.path);
         this.lastKnownTitles.set(file.path, String(propertyValue));
         if (this.enabled && prev !== String(propertyValue)) {
-          this.updateTitle();
+          this.applyTitle();
         }
       }
     } catch {
@@ -107,176 +105,190 @@ export class WindowFrameService {
   }
 
   /**
-   * Schedules a single deferred re-run of `updateTitle`. Coalesced so we don't
-   * stack retries when several events fire in quick succession.
+   * Format the resolved property text into the "Title - Vault" form Obsidian
+   * itself uses, preferring the app's internal helper when it's available.
    */
-  private scheduleRetry(): void {
-    if (this.retryTimer !== null) return;
-    this.retryTimer = window.setTimeout(() => {
-      this.retryTimer = null;
-      if (this.enabled) {
-        this.updateTitle();
-      }
-    }, 150);
+  private formatTitle(title: string): string {
+    const app = this.plugin.app as { getAppTitle?: (title: string) => string };
+    if (typeof app.getAppTitle === 'function') {
+      return app.getAppTitle(title);
+    }
+    const vaultName = this.plugin.app.vault.getName();
+    return `${title} - ${vaultName}`;
   }
 
   /**
-   * Override updateTitle to use property-based title
+   * Write our resolved title directly to the main window's document.title,
+   * then schedule a deferred re-write. Obsidian's own title code can run
+   * synchronously after our event handler returns; the deferred write
+   * (next tick + a small backstop) wins that race.
    */
-  private updateTitle() {
-    if (!this.enabled) {
-      if (this.originalUpdateTitle) {
-        this.originalUpdateTitle();
-      }
-      return;
-    }
+  private applyTitle(): void {
+    if (!this.enabled) return;
 
     const title = this.getActiveFileTitle();
-    if (title) {
-      // Get the app title format (usually "Title - Vault Name")
-      // Try to use Obsidian's getAppTitle method if available
-      const app = this.plugin.app as { getAppTitle?: (title: string) => string };
-      const mainDoc = this.getMainDocument();
-      if (typeof app.getAppTitle === 'function') {
-        mainDoc.title = app.getAppTitle(title);
-      } else {
-        // Fallback: format manually
-        const vaultName = this.plugin.app.vault.getName();
-        mainDoc.title = `${title} - ${vaultName}`;
-      }
-    } else {
-      // Fallback to original behavior
-      if (this.originalUpdateTitle) {
-        this.originalUpdateTitle();
-      }
+    if (!title) return;
+
+    const formatted = this.formatTitle(title);
+    const mainDoc = this.getMainDocument();
+    mainDoc.title = formatted;
+
+    // Defensive re-write: if Obsidian's own internal title logic runs after
+    // ours on this turn of the event loop, we overwrite it on the next.
+    if (this.deferredTimer !== null) {
+      window.clearTimeout(this.deferredTimer);
     }
+    this.deferredTimer = window.setTimeout(() => {
+      this.deferredTimer = null;
+      if (!this.enabled) return;
+      const latest = this.getActiveFileTitle();
+      if (!latest) return;
+      const latestFormatted = this.formatTitle(latest);
+      const doc = this.getMainDocument();
+      if (doc.title !== latestFormatted) {
+        doc.title = latestFormatted;
+      }
+    }, 80);
   }
 
   /**
-   * Enable the window frame feature
+   * Legacy override target. Some Obsidian builds still call
+   * `workspace.updateTitle()` for title refreshes; if so, we route it
+   * through `applyTitle`. If the property doesn't exist on this Obsidian
+   * version, this method just won't be invoked, and the event-driven path
+   * is what keeps the title correct.
+   */
+  private updateTitle(): void {
+    this.applyTitle();
+  }
+
+  /**
+   * Enable the feature: install the legacy override (if available) and
+   * start observing events.
    */
   enable() {
-    if (this.enabled) {
-      return;
-    }
+    if (this.enabled) return;
+    this.enabled = true;
 
     const workspace = this.plugin.app.workspace as WorkspaceExt;
-    if (workspace.updateTitle) {
-      // Store original method
+    if (typeof workspace.updateTitle === 'function') {
       this.originalUpdateTitle = workspace.updateTitle.bind(workspace);
-
-      // Override with our method
       workspace.updateTitle = this.updateTitle.bind(this);
-
-      this.enabled = true;
-
-      // Update immediately. Done after `enabled = true` so getActiveFileTitle()
-      // can populate the cache on the first pass.
-      this.updateTitle();
     }
+
+    // Make sure the registered listeners are actually attached.
+    this.registerEvents();
+    this.applyTitle();
   }
 
-  /**
-   * Disable the window frame feature
-   */
+  /** Restore Obsidian's original behavior and stop touching the title. */
   disable() {
-    if (!this.enabled) {
-      return;
-    }
+    if (!this.enabled) return;
+    this.enabled = false;
 
     const workspace = this.plugin.app.workspace as WorkspaceExt;
-    if (workspace.updateTitle && this.originalUpdateTitle) {
-      // Restore original method
+    if (this.originalUpdateTitle && typeof workspace.updateTitle === 'function') {
       workspace.updateTitle = this.originalUpdateTitle;
+      try {
+        workspace.updateTitle();
+      } catch {
+        // Restoring is best-effort.
+      }
+    }
+    this.originalUpdateTitle = null;
 
-      // Update to restore original title
-      workspace.updateTitle();
-
-      this.originalUpdateTitle = null;
-      this.enabled = false;
+    if (this.deferredTimer !== null) {
+      window.clearTimeout(this.deferredTimer);
+      this.deferredTimer = null;
     }
   }
 
   /**
-   * Register events for window frame updates. Idempotent — only attaches
-   * listeners on the first call. The plugin lifecycle (registerEvent) handles
-   * cleanup on unload.
+   * Register the workspace / metadata-cache events that should cause the
+   * window title to refresh. Idempotent — Obsidian's `registerEvent`
+   * handles cleanup on unload.
    */
   registerEvents() {
     if (this.eventsRegistered) return;
-    if (!this.plugin.settings.enableForWindowFrame) {
-      return;
-    }
+    if (!this.plugin.settings.enableForWindowFrame) return;
     this.eventsRegistered = true;
 
-    // Update when active file changes (new file opened in the workspace)
+    // New file opened in the workspace.
     this.plugin.registerEvent(
       this.plugin.app.workspace.on('file-open', () => {
-        if (this.enabled) {
-          this.updateTitle();
-        }
+        if (this.enabled) this.applyTitle();
       })
     );
 
-    // Update when the active leaf changes. `file-open` doesn't fire when you
-    // click between tabs/panes that already have files loaded, so without this
-    // the OS title stays stuck on whatever was set last.
+    // Tab/pane focus change within a window. `file-open` doesn't fire for
+    // this case, but the OS title needs to follow the active leaf.
     this.plugin.registerEvent(
       this.plugin.app.workspace.on('active-leaf-change', () => {
-        if (this.enabled) {
-          this.updateTitle();
-        }
+        if (this.enabled) this.applyTitle();
       })
     );
 
-    // Update when metadata changes — but only for the file we're currently
-    // showing in the title, so a write to some other file doesn't fire a
-    // pointless re-render here. (The handler's still cheap; this is mostly
-    // about correctness if the active file changed since the last render.)
+    // The active file's metadata changed: invalidate our per-file memo and
+    // re-apply if the change is for the file currently in the title.
     this.plugin.registerEvent(
       this.plugin.app.metadataCache.on('changed', (file) => {
         if (!this.enabled) return;
-        // Invalidate the per-file cache so the next read picks up the fresh
-        // property value (or its absence).
         this.lastKnownTitles.delete(file.path);
         const activeFile = this.plugin.app.workspace.getActiveFile();
         if (activeFile && activeFile.path === file.path) {
-          this.updateTitle();
+          this.applyTitle();
         }
       })
     );
 
-    // When the full vault index settles, take one more pass — handles the
-    // startup case where the active file was already open but its cache
-    // wasn't ready when we first wrote the title.
+    // Startup: take one more pass once the vault index has fully settled.
     this.plugin.registerEvent(
       this.plugin.app.metadataCache.on('resolved', () => {
-        if (this.enabled) {
-          this.updateTitle();
-        }
+        if (this.enabled) this.applyTitle();
+      })
+    );
+
+    // Layout changes — moving panes around can flip the active leaf without
+    // firing `active-leaf-change` on some builds.
+    this.plugin.registerEvent(
+      this.plugin.app.workspace.on('layout-change', () => {
+        if (this.enabled) this.applyTitle();
+      })
+    );
+
+    // Renames invalidate our per-file memo (the old path won't be hit
+    // anymore; the new path needs a fresh read).
+    this.plugin.registerEvent(
+      this.plugin.app.vault.on('rename', (file, oldPath) => {
+        const cached = this.lastKnownTitles.get(oldPath);
+        this.lastKnownTitles.delete(oldPath);
+        if (cached) this.lastKnownTitles.set(file.path, cached);
+        if (this.enabled) this.applyTitle();
+      })
+    );
+
+    // File deletions clear the memo entry.
+    this.plugin.registerEvent(
+      this.plugin.app.vault.on('delete', (file) => {
+        this.lastKnownTitles.delete(file.path);
       })
     );
   }
 
-  /**
-   * Update window frame when settings change
-   */
+  /** Update window frame when settings change */
   updateWindowFrame() {
     if (this.plugin.settings.enableForWindowFrame) {
       this.enable();
-      this.registerEvents();
     } else {
       this.disable();
     }
   }
 
-  /**
-   * Cleanup on unload
-   */
+  /** Cleanup on unload */
   onunload() {
-    if (this.retryTimer !== null) {
-      window.clearTimeout(this.retryTimer);
-      this.retryTimer = null;
+    if (this.deferredTimer !== null) {
+      window.clearTimeout(this.deferredTimer);
+      this.deferredTimer = null;
     }
     this.lastKnownTitles.clear();
     this.disable();
