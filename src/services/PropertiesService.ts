@@ -31,7 +31,7 @@ export class PropertiesService {
       if (this.isProcessing) return;
 
       // Only run if we're focused inside a property value
-      const activeEl = document.activeElement;
+      const activeEl = activeDocument.activeElement;
       if (!activeEl || !activeEl.closest('.metadata-property-value')) {
         return;
       }
@@ -49,7 +49,7 @@ export class PropertiesService {
       this.processSuggestions();
     });
 
-    this.observer.observe(document.body, {
+    this.observer.observe(activeDocument.body, {
       childList: true,
       subtree: true,
       attributes: false,
@@ -70,7 +70,7 @@ export class PropertiesService {
   private processSuggestions(): void {
     if (!this.plugin.settings.enableForProperties) return;
 
-    const popovers = document.querySelectorAll('.suggestion-container:not(.property-over-filename-suggestion)');
+    const popovers = activeDocument.querySelectorAll('.suggestion-container:not(.property-over-filename-suggestion)');
     if (popovers.length === 0) return;
 
     this.isProcessing = true;

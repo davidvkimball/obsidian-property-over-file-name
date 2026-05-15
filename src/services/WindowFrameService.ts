@@ -44,10 +44,10 @@ export class WindowFrameService {
             // Update title asynchronously
             const app = this.plugin.app as { getAppTitle?: (title: string) => string };
             if (typeof app.getAppTitle === 'function') {
-              document.title = app.getAppTitle(String(propertyValue));
+              activeDocument.title = app.getAppTitle(String(propertyValue));
             } else {
               const vaultName = this.plugin.app.vault.getName();
-              document.title = `${String(propertyValue)} - ${vaultName}`;
+              activeDocument.title = `${String(propertyValue)} - ${vaultName}`;
             }
           }
         })();
@@ -76,11 +76,11 @@ export class WindowFrameService {
       // Try to use Obsidian's getAppTitle method if available
       const app = this.plugin.app as { getAppTitle?: (title: string) => string };
       if (typeof app.getAppTitle === 'function') {
-        document.title = app.getAppTitle(title);
+        activeDocument.title = app.getAppTitle(title);
       } else {
         // Fallback: format manually
         const vaultName = this.plugin.app.vault.getName();
-        document.title = `${title} - ${vaultName}`;
+        activeDocument.title = `${title} - ${vaultName}`;
       }
     } else {
       // Fallback to original behavior

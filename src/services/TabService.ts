@@ -86,9 +86,9 @@ export class TabService {
         // Register pinned-change listener with a delay to let Obsidian finish DOM updates
         const eventRef = leaf.on('pinned-change', () => {
           // Use requestAnimationFrame for better timing with DOM updates
-          requestAnimationFrame(() => {
+          window.requestAnimationFrame(() => {
             // Small additional delay to ensure Obsidian has finished updating
-            setTimeout(() => {
+            window.setTimeout(() => {
               void this.renameTabs();
             }, 50);
           });

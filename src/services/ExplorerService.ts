@@ -161,7 +161,7 @@ export class ExplorerService {
       this.plugin.app.vault.on('rename', () => {
         if (this.plugin.settings.enableForExplorer) {
           this.explorerView = null; // Reset to get fresh view
-          setTimeout(() => this.updateAllItems(), 100);
+          window.setTimeout(() => this.updateAllItems(), 100);
         }
       })
     );
@@ -174,7 +174,7 @@ export class ExplorerService {
     if (this.plugin.settings.enableForExplorer) {
       this.explorerView = null; // Reset to get fresh view
       this.registerEvents();
-      setTimeout(() => this.updateAllItems(), 100);
+      window.setTimeout(() => this.updateAllItems(), 100);
     } else {
       this.restoreAllItems();
     }

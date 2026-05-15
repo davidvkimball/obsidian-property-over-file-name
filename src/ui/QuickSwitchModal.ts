@@ -337,7 +337,7 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
 
     // Clear previous timeout
     if (this.searchTimeout) {
-      clearTimeout(this.searchTimeout);
+      window.clearTimeout(this.searchTimeout);
     }
 
     // If no query, show recent files
@@ -715,7 +715,7 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
   }
 
   private createTypeIcon(container: HTMLElement): void {
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    const svg = activeDocument.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('width', '24');
     svg.setAttribute('height', '24');
     svg.setAttribute('viewBox', '0 0 24 24');
@@ -726,18 +726,18 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
     svg.setAttribute('stroke-linejoin', 'round');
     svg.classList.add('svg-icon', 'lucide-type');
 
-    const polyline1 = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+    const polyline1 = activeDocument.createElementNS('http://www.w3.org/2000/svg', 'polyline');
     polyline1.setAttribute('points', '4 7 4 4 20 4 20 7');
     svg.appendChild(polyline1);
 
-    const line1 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    const line1 = activeDocument.createElementNS('http://www.w3.org/2000/svg', 'line');
     line1.setAttribute('x1', '9');
     line1.setAttribute('y1', '20');
     line1.setAttribute('x2', '15');
     line1.setAttribute('y2', '20');
     svg.appendChild(line1);
 
-    const line2 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    const line2 = activeDocument.createElementNS('http://www.w3.org/2000/svg', 'line');
     line2.setAttribute('x1', '12');
     line2.setAttribute('y1', '4');
     line2.setAttribute('x2', '12');
@@ -748,7 +748,7 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
   }
 
   private createFileIcon(container: HTMLElement): void {
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    const svg = activeDocument.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('width', '24');
     svg.setAttribute('height', '24');
     svg.setAttribute('viewBox', '0 0 24 24');
@@ -759,29 +759,29 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
     svg.setAttribute('stroke-linejoin', 'round');
     svg.classList.add('svg-icon', 'lucide-file-text');
 
-    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    const path = activeDocument.createElementNS('http://www.w3.org/2000/svg', 'path');
     path.setAttribute('d', 'M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z');
     svg.appendChild(path);
 
-    const polyline1 = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+    const polyline1 = activeDocument.createElementNS('http://www.w3.org/2000/svg', 'polyline');
     polyline1.setAttribute('points', '14,2 14,8 20,8');
     svg.appendChild(polyline1);
 
-    const line1 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    const line1 = activeDocument.createElementNS('http://www.w3.org/2000/svg', 'line');
     line1.setAttribute('x1', '16');
     line1.setAttribute('y1', '13');
     line1.setAttribute('x2', '8');
     line1.setAttribute('y2', '13');
     svg.appendChild(line1);
 
-    const line2 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    const line2 = activeDocument.createElementNS('http://www.w3.org/2000/svg', 'line');
     line2.setAttribute('x1', '16');
     line2.setAttribute('y1', '17');
     line2.setAttribute('x2', '8');
     line2.setAttribute('y2', '17');
     svg.appendChild(line2);
 
-    const polyline2 = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+    const polyline2 = activeDocument.createElementNS('http://www.w3.org/2000/svg', 'polyline');
     polyline2.setAttribute('points', '10,9 9,9 8,9');
     svg.appendChild(polyline2);
 
@@ -789,7 +789,7 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
   }
 
   private createForwardIcon(container: HTMLElement): void {
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    const svg = activeDocument.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('width', '24');
     svg.setAttribute('height', '24');
     svg.setAttribute('viewBox', '0 0 24 24');
@@ -800,11 +800,11 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
     svg.setAttribute('stroke-linejoin', 'round');
     svg.classList.add('svg-icon', 'lucide-forward');
 
-    const polyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+    const polyline = activeDocument.createElementNS('http://www.w3.org/2000/svg', 'polyline');
     polyline.setAttribute('points', '15 17 20 12 15 7');
     svg.appendChild(polyline);
 
-    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    const path = activeDocument.createElementNS('http://www.w3.org/2000/svg', 'path');
     path.setAttribute('d', 'M4 18v-2a4 4 0 0 1 4-4h12');
     svg.appendChild(path);
 
@@ -812,7 +812,7 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
   }
 
   private createFilePlusIcon(container: HTMLElement): void {
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    const svg = activeDocument.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('width', '24');
     svg.setAttribute('height', '24');
     svg.setAttribute('viewBox', '0 0 24 24');
@@ -823,22 +823,22 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
     svg.setAttribute('stroke-linejoin', 'round');
     svg.classList.add('svg-icon', 'lucide-file-plus');
 
-    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    const path = activeDocument.createElementNS('http://www.w3.org/2000/svg', 'path');
     path.setAttribute('d', 'M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z');
     svg.appendChild(path);
 
-    const polyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+    const polyline = activeDocument.createElementNS('http://www.w3.org/2000/svg', 'polyline');
     polyline.setAttribute('points', '14,2 14,8 20,8');
     svg.appendChild(polyline);
 
-    const line1 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    const line1 = activeDocument.createElementNS('http://www.w3.org/2000/svg', 'line');
     line1.setAttribute('x1', '12');
     line1.setAttribute('y1', '18');
     line1.setAttribute('x2', '12');
     line1.setAttribute('y2', '12');
     svg.appendChild(line1);
 
-    const line2 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    const line2 = activeDocument.createElementNS('http://www.w3.org/2000/svg', 'line');
     line2.setAttribute('x1', '9');
     line2.setAttribute('y1', '15');
     line2.setAttribute('x2', '15');

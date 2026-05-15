@@ -103,7 +103,7 @@ export default class PropertyOverFileNamePlugin extends Plugin {
     }
 
     // Wait a bit for metadata cache to be fully populated
-    setTimeout(() => {
+    window.setTimeout(() => {
       this.updateLinkSuggester();
       this.updateQuickSwitcher();
       this.updateGraphView();
@@ -125,7 +125,7 @@ export default class PropertyOverFileNamePlugin extends Plugin {
       this.updateBookmarks();
       this.updateProperties();
       // Also refresh graph view to ensure it's updated
-      setTimeout(() => {
+      window.setTimeout(() => {
         this.graphViewService.refreshGraphView();
       }, 500);
     });
@@ -214,17 +214,23 @@ export default class PropertyOverFileNamePlugin extends Plugin {
       })
     );
 
-    // Register drag and drop event handling
+    // Register drag and drop event handling. The early-return on
+    // `event.defaultPrevented` plus the post-handling `preventDefault()` keeps
+    // us a good citizen on the editor-drop event: we don't double-handle drops
+    // another listener already consumed, and we tell downstream listeners not
+    // to handle ours.
     this.registerEvent(
       this.app.workspace.on('editor-drop', (event, editor) => {
+        if (event.defaultPrevented) return;
         if (this.settings.enableForDragDrop) {
           this.dragDropService.handleDragDrop(event, editor);
+          event.preventDefault();
         }
       })
     );
 
     // Also try DOM events as backup
-    this.registerDomEvent(document, 'drop', (event) => {
+    this.registerDomEvent(activeDocument, 'drop', (event) => {
       if (this.settings.enableForDragDrop) {
         this.dragDropService.handleDOMDrop(event);
       }

@@ -8,7 +8,12 @@ export default defineConfig([
   {
     ignores: ["main.js", "node_modules/**", "dist/**", "*.js", "scripts/**", ".ref/**"]
   },
-  ...obsidianmd.configs.recommended,
+  // Scope the obsidianmd recommended config to TypeScript only; some of its
+  // type-aware rules require a parserServices project and choke on .mjs files.
+  ...obsidianmd.configs.recommended.map((config) => ({
+    ...config,
+    files: config.files ?? ["**/*.ts"]
+  })),
   {
     files: ["**/*.ts"],
     languageOptions: {

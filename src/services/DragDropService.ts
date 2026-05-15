@@ -50,7 +50,7 @@ export class DragDropService {
       const displayName = this.getDisplayNameSync(file);
       if (displayName !== null) {
         // Immediate replacement for .md files (no retries needed)
-        setTimeout(() => {
+        window.setTimeout(() => {
           this.replaceLastInsertedLink(file, displayName, editor);
         }, 50); // Short delay just to let Obsidian insert the link first
       }
@@ -67,10 +67,10 @@ export class DragDropService {
             attempts++;
             const replaced = this.replaceLastInsertedLink(file, displayName, editor);
             if (!replaced && attempts < maxAttempts) {
-              setTimeout(attemptReplace, 50 * attempts); // Increasing delay: 50ms, 100ms, 150ms, etc.
+              window.setTimeout(attemptReplace, 50 * attempts); // Increasing delay: 50ms, 100ms, 150ms, etc.
             }
           };
-          setTimeout(attemptReplace, 150); // Start after 150ms
+          window.setTimeout(attemptReplace, 150); // Start after 150ms
         }
       })();
     }
@@ -178,7 +178,7 @@ export class DragDropService {
         const displayName = this.getDisplayNameSync(file);
         if (displayName !== null) {
           // Immediate replacement for .md files (no retries needed)
-          setTimeout(() => {
+          window.setTimeout(() => {
             const activeView = this.plugin.app.workspace.getActiveViewOfType(MarkdownView);
             if (activeView && activeView.editor) {
               this.replaceLastInsertedLink(file, displayName, activeView.editor);
@@ -200,13 +200,13 @@ export class DragDropService {
               if (activeView && activeView.editor) {
                 const replaced = this.replaceLastInsertedLink(file, displayName, activeView.editor);
                 if (!replaced && attempts < maxAttempts) {
-                  setTimeout(attemptReplace, 50 * attempts); // Increasing delay: 50ms, 100ms, 150ms, etc.
+                  window.setTimeout(attemptReplace, 50 * attempts); // Increasing delay: 50ms, 100ms, 150ms, etc.
                 }
               } else if (attempts < maxAttempts) {
-                setTimeout(attemptReplace, 50 * attempts);
+                window.setTimeout(attemptReplace, 50 * attempts);
               }
             };
-            setTimeout(attemptReplace, 150); // Start after 150ms
+            window.setTimeout(attemptReplace, 150); // Start after 150ms
           }
         })();
       }

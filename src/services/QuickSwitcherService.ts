@@ -61,9 +61,9 @@ export class QuickSwitcherService {
         
         // Use our custom modal when this command is active
         // Close any existing modals first
-        const existingModals = document.querySelectorAll('.modal');
+        const existingModals = activeDocument.querySelectorAll('.modal');
         existingModals.forEach(modal => {
-          if (modal instanceof HTMLElement && !modal.classList.contains('hidden')) {
+          if (modal.instanceOf(HTMLElement) && !modal.classList.contains('hidden')) {
             modal.addClass('hidden');
           }
         });

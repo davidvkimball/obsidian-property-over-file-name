@@ -235,7 +235,7 @@ export class BacklinkService {
     // Try to find a link element (parent or child)
     const link = element.closest('a') || element.querySelector('a');
     if (link) {
-      const href = link.getAttribute('href') ?? (link instanceof HTMLAnchorElement ? link.href : null);
+      const href = link.getAttribute('href') ?? (link.instanceOf(HTMLAnchorElement) ? link.href : null);
 
       // Try data-href attribute (Obsidian sometimes uses this)
       const dataHref = link.getAttribute('data-href');
@@ -528,7 +528,7 @@ export class BacklinkService {
         let changed = false;
 
         try {
-          const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+          const walker = activeDocument.createTreeWalker(el, NodeFilter.SHOW_TEXT);
           let n: Node | null = walker.nextNode();
           while (n) {
             const textNode = n as Text;
@@ -581,7 +581,7 @@ export class BacklinkService {
     // Override textContent on backlink elements to intercept immediately
     this.overrideBacklinkElements();
 
-    let updateTimeout: ReturnType<typeof setTimeout> | null = null;
+    let updateTimeout: number | null = null;
 
     this.observer = new MutationObserver((mutations) => {
       // Check if any mutations affect backlink containers
@@ -592,7 +592,7 @@ export class BacklinkService {
         if (mutation.type === 'childList') {
           // Check for new elements that might be backlinks
           for (const node of Array.from(mutation.addedNodes)) {
-            if (node instanceof HTMLElement) {
+            if (node.instanceOf(HTMLElement)) {
               const embeddedBacklinks = node.closest('.embedded-backlinks');
               const backlinksPanel = node.closest('.backlinks-pane, .backlink-pane, .outgoing-link-pane, .outgoing-links, .backlink-container');
 
@@ -604,7 +604,7 @@ export class BacklinkService {
                   try {
                     const elements = node.querySelectorAll?.(selector);
                     elements?.forEach((el: Element) => {
-                      if (el instanceof HTMLElement) {
+                      if (el.instanceOf(HTMLElement)) {
                         newElements.push(el);
                       }
                     });
@@ -619,7 +619,7 @@ export class BacklinkService {
           const target = mutation.target;
 
           // Check if mutation is in a backlink container
-          if (target instanceof HTMLElement) {
+          if (target.instanceOf(HTMLElement)) {
             const embeddedBacklinks = target.closest('.embedded-backlinks');
             const backlinksPanel = target.closest('.backlinks-pane, .backlink-pane, .outgoing-link-pane, .outgoing-links, .backlink-container');
 
@@ -654,9 +654,9 @@ export class BacklinkService {
 
         // Debounce updates to avoid excessive processing
         if (updateTimeout) {
-          clearTimeout(updateTimeout);
+          window.clearTimeout(updateTimeout);
         }
-        updateTimeout = setTimeout(() => {
+        updateTimeout = window.setTimeout(() => {
           this.updateBacklinks();
           this.overrideBacklinkElements(); // Re-override in case new elements were added
           updateTimeout = null;
@@ -665,7 +665,7 @@ export class BacklinkService {
     });
 
     // Observe the entire document for changes
-    this.observer.observe(document.body, {
+    this.observer.observe(activeDocument.body, {
       childList: true,
       subtree: true,
       characterData: true,
@@ -688,19 +688,19 @@ export class BacklinkService {
     ];
 
     const containers = [
-      ...Array.from(document.querySelectorAll('.embedded-backlinks')),
-      ...Array.from(document.querySelectorAll('.backlinks-pane')),
-      ...Array.from(document.querySelectorAll('.backlink-pane')),
-      ...Array.from(document.querySelectorAll('.outgoing-link-pane')),
-      ...Array.from(document.querySelectorAll('.outgoing-links')),
-      ...Array.from(document.querySelectorAll('.backlink-container'))
+      ...Array.from(activeDocument.querySelectorAll('.embedded-backlinks')),
+      ...Array.from(activeDocument.querySelectorAll('.backlinks-pane')),
+      ...Array.from(activeDocument.querySelectorAll('.backlink-pane')),
+      ...Array.from(activeDocument.querySelectorAll('.outgoing-link-pane')),
+      ...Array.from(activeDocument.querySelectorAll('.outgoing-links')),
+      ...Array.from(activeDocument.querySelectorAll('.backlink-container'))
     ];
 
     containers.forEach(container => {
       selectors.forEach(selector => {
         try {
           container.querySelectorAll(selector).forEach(el => {
-            if (el instanceof HTMLElement) {
+            if (el.instanceOf(HTMLElement)) {
               this.overrideElementTextContent(el);
             }
           });
@@ -791,7 +791,7 @@ export class BacklinkService {
   onLayoutChange(): void {
     if (this.plugin.settings.enableForBacklinks) {
       // Small delay to let Obsidian render first
-      setTimeout(() => {
+      window.setTimeout(() => {
         this.updateBacklinks();
       }, 100);
     } else {
@@ -804,7 +804,7 @@ export class BacklinkService {
    */
   onFileOpen(): void {
     if (this.plugin.settings.enableForBacklinks) {
-      setTimeout(() => {
+      window.setTimeout(() => {
         this.updateEmbeddedBacklinks();
       }, 200);
     }

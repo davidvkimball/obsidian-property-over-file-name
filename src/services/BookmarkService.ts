@@ -33,7 +33,7 @@ export class BookmarkService {
    */
   private hookBookmarks() {
     // Check if modal is already present
-    const existingModal = document.querySelector('.modal');
+    const existingModal = activeDocument.querySelector('.modal');
     if (existingModal instanceof HTMLElement) {
       this.handleModalAppearance(existingModal);
     }
@@ -42,7 +42,7 @@ export class BookmarkService {
     this.mutationObserver = new MutationObserver((mutations) => {
       for (const mutation of mutations) {
         mutation.addedNodes.forEach((node) => {
-          if (node instanceof HTMLElement) {
+          if (node.instanceOf(HTMLElement)) {
             // The modal might be the node itself or inside it
             const modalEl = node.classList.contains('modal') ? node : node.querySelector('.modal') as HTMLElement;
             if (modalEl) {
@@ -54,7 +54,7 @@ export class BookmarkService {
     });
 
     // Start observing the document body for new modals
-    this.mutationObserver.observe(document.body, {
+    this.mutationObserver.observe(activeDocument.body, {
       childList: true,
       subtree: true
     });
@@ -88,9 +88,9 @@ export class BookmarkService {
           const nameEl = item.querySelector('.setting-item-name');
           const nameText = nameEl?.textContent?.toLowerCase().trim() || '';
           if (nameText === 'title') {
-            titleInput = item.querySelector('input[type="text"]') as HTMLInputElement;
+            titleInput = item.querySelector('input[type="text"]');
           } else if (nameText === 'path') {
-            pathInput = item.querySelector('input[type="text"]') as HTMLInputElement;
+            pathInput = item.querySelector('input[type="text"]');
           }
         });
 
@@ -150,7 +150,7 @@ export class BookmarkService {
 
       attempts++;
       if (attempts < maxAttempts) {
-        setTimeout(() => void tryIdentifyAndPopulate(), 50);
+        window.setTimeout(() => void tryIdentifyAndPopulate(), 50);
       }
       return false;
     };

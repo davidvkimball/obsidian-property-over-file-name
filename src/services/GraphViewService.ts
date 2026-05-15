@@ -49,7 +49,7 @@ function getLeafKey(leafType: GraphLeafType, leafId: string): string {
 
 function asLeafLike(value: unknown): LeafLike | null {
   if (!value || typeof value !== 'object') return null;
-  return value as LeafLike;
+  return value;
 }
 
 function isGraphNode(value: unknown): value is GraphNode {
@@ -220,7 +220,7 @@ export class GraphViewService {
       iterateGraphNodes(nodes, (node) => {
         if (!node || typeof node !== 'object') return;
         if (!isNodeTextCarrier(node)) return;
-        const original = this.originalNodeText.get(node as unknown as object);
+        const original = this.originalNodeText.get(node);
         if (original !== undefined) node.text.text = original;
       });
     }
@@ -254,7 +254,7 @@ export class GraphViewService {
       }, 150);
     });
 
-    this.observer.observe(document.body, { childList: true, subtree: true });
+    this.observer.observe(activeDocument.body, { childList: true, subtree: true });
   }
 
   private disconnectObserver(): void {
