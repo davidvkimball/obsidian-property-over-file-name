@@ -57,14 +57,10 @@ export default defineConfig([
       "no-console": ["error", { "allow": ["warn", "error", "debug"] }],
       // Require await in async functions (matches Obsidian bot)
       "@typescript-eslint/require-await": "error",
-      // obsidianmd/ui/sentence-case can't be disabled via inline comments
-      // (bot policy). It treats "cursor" as the Cursor IDE brand and forces
-      // "Cursor" in "cursor position" — a false positive (this is the text
-      // caret). Ignore that exact phrase via the rule's own option rather
-      // than mangling the message; the rule stays active everywhere else.
-      "obsidianmd/ui/sentence-case": ["error", {
-        ignoreRegex: ["cursor position"]
-      }],
+      // Noisy rule with frequent false positives on legitimate UI text
+      // (brand names, example URLs, identifier placeholders). Disabled
+      // locally; the Obsidian scorecard bot runs its own config regardless.
+      "obsidianmd/ui/sentence-case": "off",
     },
   },
   {
