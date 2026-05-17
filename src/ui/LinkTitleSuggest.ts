@@ -582,7 +582,7 @@ export class LinkTitleSuggest extends EditorSuggest<SuggestionItem> {
     try {
       editor.setCursor({ line: start.line, ch: newCursorPos });
     } catch {
-      new Notice('Could not reposition the editor caret. See the developer console for details.');
+      new Notice('Error setting cursor position. Please check console for details.');
     }
   }
 
