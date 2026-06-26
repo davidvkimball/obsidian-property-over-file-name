@@ -11,8 +11,6 @@ export interface PluginSettings {
   enableForDragDrop: boolean;
   useSimpleSearch: boolean;
   enableForGraphView: boolean;
-  enableForBacklinks: boolean;
-  hideUnlinkedMentionsInBacklinks: boolean;
   enableForTabs: boolean;
   enableForExplorer: boolean;
   folderNoteFilename: string;
@@ -22,6 +20,7 @@ export interface PluginSettings {
   enableMdxSupport: boolean;
   quickSwitcherExcludedBehavior: ExcludedFilesBehavior;
   linkSuggesterExcludedBehavior: ExcludedFilesBehavior;
+  hideUnresolvedLinks: boolean;
 }
 
 export interface CachedFileData {
@@ -120,7 +119,6 @@ export interface PropertyOverFileNamePlugin extends Plugin {
   updateLinkSuggester(): void;
   updateQuickSwitcher(): void;
   updateGraphView(): void;
-  updateBacklinks(): void;
   updateTabs(): void;
   updateExplorer(): void;
   updateWindowFrame(): void;

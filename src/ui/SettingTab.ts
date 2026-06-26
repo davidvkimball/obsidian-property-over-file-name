@@ -28,9 +28,7 @@ export class SettingTab extends PluginSettingTab {
               this.plugin.settings.propertyKey = value.trim() || 'title';
               await this.plugin.saveData(this.plugin.settings);
               this.plugin.updateLinkSuggester();
-              this.plugin.updateGraphView();
-              this.plugin.updateBacklinks();
-              this.plugin.updateTabs();
+              this.plugin.updateGraphView();              this.plugin.updateTabs();
               this.plugin.updateExplorer();
               this.plugin.updateWindowFrame();
               this.plugin.updateBookmarks();
@@ -90,6 +88,11 @@ export class SettingTab extends PluginSettingTab {
         control: { type: 'toggle' as const, key: 'includeAliasesInSearch' },
       },
       {
+        name: 'Hide unresolved links',
+        desc: 'Only show notes that already exist. Hides unresolved links (placeholders for notes that have been referenced but never created) from quick switcher and link suggester results.',
+        control: { type: 'toggle' as const, key: 'hideUnresolvedLinks' },
+      },
+      {
         name: 'When dragging notes',
         desc: 'Use property-based titles when dragging notes from the file explorer.',
         control: { type: 'toggle' as const, key: 'enableForDragDrop' },
@@ -118,34 +121,6 @@ export class SettingTab extends PluginSettingTab {
             .onChange(async value => {
               this.plugin.settings.enableForGraphView = value;
               await this.plugin.saveSettings();
-            }));
-        },
-      },
-      {
-        name: 'In backlinks and outgoing links',
-        desc: 'Use the property instead of the file name in the linked mentions footer, dedicated backlinks panel, and outgoing links.',
-        // Render: side effect (backlinks refresh).
-        render: (setting: Setting) => {
-          setting.addToggle(toggle => toggle
-            .setValue(this.plugin.settings.enableForBacklinks)
-            .onChange(async value => {
-              this.plugin.settings.enableForBacklinks = value;
-              await this.plugin.saveData(this.plugin.settings);
-              this.plugin.updateBacklinks();
-            }));
-        },
-      },
-      {
-        name: 'Hide unlinked mentions (backlinks panel)',
-        desc: 'Hide the “Unlinked mentions” section in the backlinks panel and skip processing it. Useful for folder-note setups where file names like `index` make unlinked mentions noisy.',
-        // Render: side effect (backlinks refresh).
-        render: (setting: Setting) => {
-          setting.addToggle(toggle => toggle
-            .setValue(this.plugin.settings.hideUnlinkedMentionsInBacklinks)
-            .onChange(async value => {
-              this.plugin.settings.hideUnlinkedMentionsInBacklinks = value;
-              await this.plugin.saveData(this.plugin.settings);
-              this.plugin.updateBacklinks();
             }));
         },
       },
@@ -271,9 +246,7 @@ export class SettingTab extends PluginSettingTab {
               this.plugin.rebuildCache();
               this.plugin.updateLinkSuggester();
               this.plugin.updateQuickSwitcher();
-              this.plugin.updateGraphView();
-              this.plugin.updateBacklinks();
-              this.plugin.updateTabs();
+              this.plugin.updateGraphView();              this.plugin.updateTabs();
               this.plugin.updateExplorer();
               this.plugin.updateWindowFrame();
               this.plugin.updateBookmarks();
@@ -305,9 +278,7 @@ export class SettingTab extends PluginSettingTab {
               this.plugin.settings.propertyKey = value.trim() || 'title';
               await this.plugin.saveData(this.plugin.settings);
               this.plugin.updateLinkSuggester();
-              this.plugin.updateGraphView();
-              this.plugin.updateBacklinks();
-              this.plugin.updateTabs();
+              this.plugin.updateGraphView();              this.plugin.updateTabs();
               this.plugin.updateExplorer();
               this.plugin.updateWindowFrame();
               this.plugin.updateBookmarks();
@@ -390,6 +361,20 @@ export class SettingTab extends PluginSettingTab {
 
     generalGroup.addSetting(setting => {
       setting
+        .setName('Hide unresolved links')
+        .setDesc('Only show notes that already exist. Hides unresolved links (placeholders for notes that have been referenced but never created) from quick switcher and link suggester results.')
+        .addToggle(toggle =>
+          toggle
+            .setValue(this.plugin.settings.hideUnresolvedLinks)
+            .onChange(async value => {
+              this.plugin.settings.hideUnresolvedLinks = value;
+              await this.plugin.saveData(this.plugin.settings);
+            })
+        );
+    });
+
+    generalGroup.addSetting(setting => {
+      setting
         .setName('When dragging notes')
         .setDesc('Use property-based titles when dragging notes from the file explorer.')
         .addToggle(toggle =>
@@ -427,36 +412,6 @@ export class SettingTab extends PluginSettingTab {
             .onChange(async value => {
               this.plugin.settings.enableForGraphView = value;
               await this.plugin.saveSettings();
-            })
-        );
-    });
-
-    generalGroup.addSetting(setting => {
-      setting
-        .setName('In backlinks and outgoing links')
-        .setDesc('Use the property instead of the file name in the linked mentions footer, dedicated backlinks panel, and outgoing links.')
-        .addToggle(toggle =>
-          toggle
-            .setValue(this.plugin.settings.enableForBacklinks)
-            .onChange(async value => {
-              this.plugin.settings.enableForBacklinks = value;
-              await this.plugin.saveData(this.plugin.settings);
-              this.plugin.updateBacklinks();
-            })
-        );
-    });
-
-    generalGroup.addSetting(setting => {
-      setting
-        .setName('Hide unlinked mentions (backlinks panel)')
-        .setDesc('Hide the “Unlinked mentions” section in the backlinks panel and skip processing it. Useful for folder-note setups where file names like `index` make unlinked mentions noisy.')
-        .addToggle(toggle =>
-          toggle
-            .setValue(this.plugin.settings.hideUnlinkedMentionsInBacklinks)
-            .onChange(async value => {
-              this.plugin.settings.hideUnlinkedMentionsInBacklinks = value;
-              await this.plugin.saveData(this.plugin.settings);
-              this.plugin.updateBacklinks();
             })
         );
     });
@@ -594,9 +549,7 @@ export class SettingTab extends PluginSettingTab {
               this.plugin.rebuildCache();
               this.plugin.updateLinkSuggester();
               this.plugin.updateQuickSwitcher();
-              this.plugin.updateGraphView();
-              this.plugin.updateBacklinks();
-              this.plugin.updateTabs();
+              this.plugin.updateGraphView();              this.plugin.updateTabs();
               this.plugin.updateExplorer();
               this.plugin.updateWindowFrame();
               this.plugin.updateBookmarks();

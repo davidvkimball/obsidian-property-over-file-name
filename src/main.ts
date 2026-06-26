@@ -8,7 +8,6 @@ import { QuickSwitcherService } from './services/QuickSwitcherService';
 import { DragDropService } from './services/DragDropService';
 import { CacheService } from './services/CacheService';
 import { GraphViewService } from './services/GraphViewService';
-import { BacklinkService } from './services/BacklinkService';
 import { TabService } from './services/TabService';
 import { ExplorerService } from './services/ExplorerService';
 import { WindowFrameService } from './services/WindowFrameService';
@@ -23,7 +22,6 @@ export default class PropertyOverFileNamePlugin extends Plugin {
   private dragDropService!: DragDropService;
   private cacheService!: CacheService;
   private graphViewService!: GraphViewService;
-  private backlinkService!: BacklinkService;
   private tabService!: TabService;
   private explorerService!: ExplorerService;
   private windowFrameService!: WindowFrameService;
@@ -72,7 +70,6 @@ export default class PropertyOverFileNamePlugin extends Plugin {
     this.dragDropService = new DragDropService(this);
     this.cacheService = new CacheService(this);
     this.graphViewService = new GraphViewService(this);
-    this.backlinkService = new BacklinkService(this);
     this.tabService = new TabService(this);
     this.explorerService = new ExplorerService(this);
     this.windowFrameService = new WindowFrameService(this);
@@ -107,7 +104,6 @@ export default class PropertyOverFileNamePlugin extends Plugin {
       this.updateLinkSuggester();
       this.updateQuickSwitcher();
       this.updateGraphView();
-      this.updateBacklinks();
       this.updateTabs();
       this.updateExplorer();
       this.updateWindowFrame();
@@ -118,7 +114,6 @@ export default class PropertyOverFileNamePlugin extends Plugin {
     // Set up graph view handling
     this.app.workspace.onLayoutReady(() => {
       this.graphViewService.onLayoutChange();
-      this.backlinkService.onLayoutChange();
       void this.tabService.renameTabs();
       this.updateExplorer();
       this.updateWindowFrame();
@@ -134,18 +129,10 @@ export default class PropertyOverFileNamePlugin extends Plugin {
     this.registerEvent(
       this.app.workspace.on('layout-change', () => {
         this.graphViewService.onLayoutChange();
-        this.backlinkService.onLayoutChange();
       })
     );
 
     // Layout changes are now handled primarily via MutationObserver in GraphViewService
-
-    // Set up backlinks handling
-    this.registerEvent(
-      this.app.workspace.on('file-open', () => {
-        this.backlinkService.onFileOpen();
-      })
-    );
 
     // Register file change events to invalidate cache
     this.registerEvent(
@@ -186,10 +173,6 @@ export default class PropertyOverFileNamePlugin extends Plugin {
           // Refresh graph view when metadata changes (to update visible nodes)
           if (this.settings.enableForGraphView) {
             this.graphViewService.refreshGraphView();
-          }
-          // Refresh backlinks when metadata changes
-          if (this.settings.enableForBacklinks) {
-            this.backlinkService.updateBacklinks();
           }
           // Refresh explorer when metadata changes
           if (this.settings.enableForExplorer) {
@@ -273,10 +256,6 @@ export default class PropertyOverFileNamePlugin extends Plugin {
     this.graphViewService.updateGraphView();
   }
 
-  updateBacklinks() {
-    this.backlinkService.updateBacklinks();
-  }
-
   updateTabs() {
     this.tabService.updateTabs();
   }
@@ -313,9 +292,6 @@ export default class PropertyOverFileNamePlugin extends Plugin {
 
     // Clean up graph view
     this.graphViewService.onunload();
-
-    // Clean up backlinks service
-    this.backlinkService.onunload();
 
     // Clean up tab service
     this.tabService.onunload();

@@ -9,8 +9,6 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   enableForDragDrop: true,
   useSimpleSearch: false,
   enableForGraphView: true,
-  enableForBacklinks: true,
-  hideUnlinkedMentionsInBacklinks: false,
   enableForTabs: true,
   enableForExplorer: false,
   folderNoteFilename: '',
@@ -20,6 +18,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   enableMdxSupport: false,
   quickSwitcherExcludedBehavior: 'deemphasize',
   linkSuggesterExcludedBehavior: 'deemphasize',
+  hideUnresolvedLinks: false,
 };
 
 export function validateSettings(settings: PluginSettings): { isValid: boolean; errors: string[] } {

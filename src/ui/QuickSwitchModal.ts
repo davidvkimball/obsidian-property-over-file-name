@@ -451,7 +451,7 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
     // Add unresolved links if "Show existing only" is disabled
     // This matches Quick Switch ++ behavior: unresolved: !settings.showExistingOnly
     const quickSwitcherOptions = this.getQuickSwitcherOptions();
-    const showExistingOnly = quickSwitcherOptions?.showExistingOnly ?? false;
+    const showExistingOnly = this.plugin.settings.hideUnresolvedLinks || (quickSwitcherOptions?.showExistingOnly ?? false);
 
     if (!showExistingOnly) {
       // Get unresolved links from metadata cache (like Quick Switch ++ does)
