@@ -10,10 +10,9 @@ export default defineConfig([
   },
   // Scope the obsidianmd recommended config to TypeScript only; some of its
   // type-aware rules require a parserServices project and choke on .mjs files.
-  ...obsidianmd.configs.recommended.map((config) => ({
-    ...config,
-    files: config.files ?? ["**/*.ts"]
-  })),
+  ...obsidianmd.configs.recommended.map((config) =>
+    config.rules ? { ...config, files: config.files ?? ["**/*.ts"] } : config,
+  ),
   {
     files: ["**/*.ts"],
     languageOptions: {
@@ -73,6 +72,14 @@ export default defineConfig([
         __dirname: "readonly",
         __filename: "readonly"
       }
+    },
+    // Build tooling runs in Node, not inside the plugin sandbox, so the
+    // mobile-compatibility and console restrictions that apply to plugin
+    // source are not relevant here. The scorecard scans plugin source only.
+    rules: {
+      "obsidianmd/no-nodejs-modules": "off",
+      "obsidianmd/rule-custom-message": "off",
+      "no-console": "off"
     }
   },
 ]);
