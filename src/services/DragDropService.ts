@@ -12,13 +12,19 @@ export class DragDropService {
     this.plugin = plugin;
   }
 
-  handleDragDrop(event: DragEvent, editor: Editor): void {
+  /**
+   * Returns true only when this drop is one the plugin claims, so the caller
+   * knows whether to call preventDefault(). A drop of an image or any other
+   * non-note file is not ours, and preventing default on it would stop
+   * Obsidian from embedding the file at all.
+   */
+  handleDragDrop(event: DragEvent, editor: Editor): boolean {
     // CRITICAL: Capture dataTransfer synchronously in a local variable
     // The event.dataTransfer can become null/undefined after the event handler completes,
     // so we must capture it immediately and use the local reference
     const dataTransfer = event.dataTransfer;
     if (!dataTransfer) {
-      return;
+      return false;
     }
 
     // Get the file path from the drag event synchronously
@@ -27,13 +33,15 @@ export class DragDropService {
     const filePath = dataTransfer.getData('text/plain');
     
     if (!filePath || (!filePath.endsWith('.md') && !(filePath.endsWith('.mdx') && this.plugin.settings.enableMdxSupport))) {
-      return;
+      // Not a note drag. Most commonly an image or document being dropped in,
+      // which Obsidian must be left to embed itself.
+      return false;
     }
 
     // Prevent duplicate processing if both handlers fire for the same drop
     const now = Date.now();
     if (now - this.lastDropTime < this.DROP_DEBOUNCE_MS && this.lastDropData === filePath) {
-      return;
+      return false;
     }
     this.lastDropTime = now;
     this.lastDropData = filePath;
@@ -41,7 +49,7 @@ export class DragDropService {
     // Find the file in the vault
     const file = this.plugin.app.vault.getAbstractFileByPath(filePath);
     if (!file || !(file instanceof TFile)) {
-      return;
+      return false;
     }
 
     // For .md files, use synchronous logic (fast, immediate)
@@ -73,7 +81,11 @@ export class DragDropService {
           window.setTimeout(attemptReplace, 150); // Start after 150ms
         }
       })();
+    } else {
+      return false;
     }
+
+    return true;
   }
 
   handleDOMDrop(event: DragEvent): void {

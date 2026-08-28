@@ -206,8 +206,12 @@ export default class PropertyOverFileNamePlugin extends Plugin {
       this.app.workspace.on('editor-drop', (event, editor) => {
         if (event.defaultPrevented) return;
         if (this.settings.enableForDragDrop) {
-          this.dragDropService.handleDragDrop(event, editor);
-          event.preventDefault();
+          // Only prevent default when the drop was actually ours. Doing it
+          // unconditionally swallowed every other drop, so dropping an image
+          // or a document into a note stopped embedding it.
+          if (this.dragDropService.handleDragDrop(event, editor)) {
+            event.preventDefault();
+          }
         }
       })
     );
