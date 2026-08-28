@@ -898,14 +898,19 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
       });
     } else if (item instanceof TFile) {
       // Handle different modifier keys like default Obsidian
+      // Cmd stands in for Ctrl on macOS, matching the default quick switcher.
+      const modKey = evt instanceof KeyboardEvent && (evt.ctrlKey || evt.metaKey);
       if (evt instanceof KeyboardEvent) {
-        if (evt.ctrlKey && evt.altKey) {
-          // Open to the right
-          const leaf = this.app.workspace.getLeaf(true);
+        if (modKey && evt.altKey) {
+          // Open to the right. This needs an explicit split; getLeaf(true) only
+          // opens a new tab.
+          const leaf = this.app.workspace.getLeaf('split', 'vertical');
           void leaf.openFile(item);
-        } else if (evt.ctrlKey) {
-          // Open in new tab
-          void this.app.workspace.getLeaf().openFile(item);
+        } else if (modKey) {
+          // Open in a new tab. getLeaf() with no argument returns the existing
+          // leaf, which reopened the note in the current tab and looked like
+          // nothing happened.
+          void this.app.workspace.getLeaf('tab').openFile(item);
         } else if (evt.shiftKey) {
           // Create new note with the exact search query, like default quick switcher
           const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
