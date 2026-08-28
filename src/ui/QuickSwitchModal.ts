@@ -42,6 +42,37 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
         e.stopPropagation();
       }
     });
+
+    // The base SuggestModal only binds plain Enter. Without these the modifier
+    // combinations never reach onChooseItem at all, so Ctrl+Enter,
+    // Ctrl+Alt+Enter and Shift+Enter did nothing. Mod is Ctrl on Windows and
+    // Linux and Cmd on macOS, matching the default quick switcher.
+    this.scope.register(['Mod'], 'Enter', (evt) => {
+      this.chooseSelected(evt);
+      return false;
+    });
+    this.scope.register(['Mod', 'Alt'], 'Enter', (evt) => {
+      this.chooseSelected(evt);
+      return false;
+    });
+    this.scope.register(['Shift'], 'Enter', (evt) => {
+      this.chooseSelected(evt);
+      return false;
+    });
+  }
+
+  /**
+   * Hand the highlighted suggestion to onChooseItem along with the real
+   * keyboard event, so the modifier branches there can act on it. `chooser` is
+   * internal to SuggestModal and not in the public typings, so it is accessed
+   * defensively: if it is ever missing the shortcut simply does nothing rather
+   * than throwing inside a key handler.
+   */
+  private chooseSelected(evt: KeyboardEvent): void {
+    const chooser = (this as unknown as {
+      chooser?: { useSelectedItem?: (e: KeyboardEvent) => void };
+    }).chooser;
+    chooser?.useSelectedItem?.(evt);
   }
 
   private addFooter(): void {

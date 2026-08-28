@@ -27,12 +27,12 @@ export class DragDropService {
       return false;
     }
 
-    // Get the file path from the drag event synchronously
-    // This must be done during the event, not in setTimeout
-    // Use the captured dataTransfer reference, not event.dataTransfer
-    const filePath = dataTransfer.getData('text/plain');
-    
-    if (!filePath || (!filePath.endsWith('.md') && !(filePath.endsWith('.mdx') && this.plugin.settings.enableMdxSupport))) {
+    // Get the dragged note from the event synchronously.
+    // This must be done during the event, not in setTimeout.
+    // Use the captured dataTransfer reference, not event.dataTransfer.
+    const filePath = this.resolveDroppedNotePath(dataTransfer.getData('text/plain'));
+
+    if (!filePath) {
       // Not a note drag. Most commonly an image or document being dropped in,
       // which Obsidian must be left to embed itself.
       return false;
@@ -86,6 +86,52 @@ export class DragDropService {
     }
 
     return true;
+  }
+
+  /**
+   * Work out which note a drag payload refers to.
+   *
+   * The payload is not always a bare vault path. Depending on the vault's link
+   * format Obsidian hands over a wikilink, a Markdown link, or an obsidian://
+   * URL, and the previous code required the string to end in .md, so every one
+   * of those forms was rejected and the drag was never handled at all.
+   *
+   * Returns the vault path of the note, or null when the drop is not a note
+   * this plugin should touch.
+   */
+  private resolveDroppedNotePath(raw: string): string | null {
+    if (!raw) return null;
+    let text = raw.trim();
+
+    // obsidian://open?vault=...&file=<path>
+    if (text.startsWith('obsidian://')) {
+      try {
+        const fileParam = new URL(text).searchParams.get('file');
+        if (fileParam) text = fileParam;
+      } catch {
+        return null;
+      }
+    }
+
+    // [[path/to/note|Alias]] or [[path/to/note]]
+    const wiki = /^\[\[([^\]|]+)(?:\|[^\]]*)?\]\]$/.exec(text);
+    if (wiki && wiki[1]) text = wiki[1];
+
+    // [Label](path/to/note.md)
+    const md = /^\[[^\]]*\]\(([^)]+)\)$/.exec(text);
+    if (md && md[1]) text = md[1];
+
+    text = decodeURIComponent(text.trim());
+    if (!text) return null;
+
+    // Resolve through Obsidian so a shortest-form link, a relative path or a
+    // path without its extension all land on the same file.
+    const resolved = this.plugin.app.metadataCache.getFirstLinkpathDest(text, '');
+    const path = resolved ? resolved.path : text;
+
+    const isMd = path.endsWith('.md');
+    const isMdx = path.endsWith('.mdx') && this.plugin.settings.enableMdxSupport;
+    return isMd || isMdx ? path : null;
   }
 
   handleDOMDrop(event: DragEvent): void {
