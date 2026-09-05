@@ -1,5 +1,5 @@
 import { Editor, EditorPosition, EditorSuggest, EditorSuggestContext, EditorSuggestTriggerInfo, MarkdownView, Notice, TFile, prepareFuzzySearch, prepareSimpleSearch, SearchResult } from 'obsidian';
-import { SuggestionItem, CachedFileData, EditorSuggestInternal, SearchMatchReason, PropertyOverFileNamePlugin, VaultInternal, QuickSwitcherPluginInstance, AppInternal } from '../types';
+import { SuggestionItem, CachedFileData, EditorSuggestInternal, SearchMatchReason, PropertyOverFileNamePlugin, QuickSwitcherPluginInstance, AppInternal } from '../types';
 import { buildFileCache, isExcluded } from '../utils/search';
 
 export class LinkTitleSuggest extends EditorSuggest<SuggestionItem> {
@@ -555,28 +555,23 @@ export class LinkTitleSuggest extends EditorSuggest<SuggestionItem> {
       return;
     }
 
-    const vault = this.app.vault as unknown as VaultInternal;
-    const useMarkdownLinks = vault.getConfig?.('useMarkdownLinks') ?? false;
-    let linkText: string;
-
-    // Only add display text if the note has the custom property
-    // Otherwise, use default Obsidian behavior (no display text)
-    if (suggestion.isCustomDisplay) {
-      if (useMarkdownLinks) {
-        linkText = `[${suggestion.display}](${encodeURI(suggestion.file.path)})`;
-      } else {
-        const linkPath = suggestion.file.path.replace('.md', '');
-        linkText = `[[${linkPath}|${suggestion.display}]]`;
-      }
-    } else {
-      // Default Obsidian behavior - no display text
-      if (useMarkdownLinks) {
-        linkText = `[${suggestion.file.path.replace('.md', '')}](${encodeURI(suggestion.file.path)})`;
-      } else {
-        const linkPath = suggestion.file.path.replace('.md', '');
-        linkText = `[[${linkPath}]]`;
-      }
-    }
+    // Let Obsidian build the link. Constructing it by hand from file.path
+    // ignored the "New link format" setting and always wrote the full path,
+    // and it also ignored the shortest-path and relative-path modes entirely.
+    // generateMarkdownLink handles the link format, the wikilink or Markdown
+    // choice, and the alias, so all of that stays consistent with the vault's
+    // own settings.
+    //
+    // The alias is only supplied when the note actually has the custom
+    // property, so notes without it keep plain Obsidian behaviour.
+    const sourcePath = activeView.file?.path ?? '';
+    const alias = suggestion.isCustomDisplay ? suggestion.display : undefined;
+    const linkText = this.app.fileManager.generateMarkdownLink(
+      suggestion.file,
+      sourcePath,
+      undefined,
+      alias
+    );
     editor.replaceRange(linkText, { line: start.line, ch: start.ch }, endPos);
     const newCursorPos = start.ch + linkText.length;
     try {
