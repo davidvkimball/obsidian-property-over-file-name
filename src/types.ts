@@ -42,6 +42,8 @@ export interface SuggestionItem {
   file?: TFile;
   display: string;
   isCustomDisplay: boolean;
+  /** The alias the query matched, when the suggestion was found by alias. */
+  matchedAlias?: string;
   isNoMatch?: boolean;
   isNewNote?: boolean;
   newName?: string;

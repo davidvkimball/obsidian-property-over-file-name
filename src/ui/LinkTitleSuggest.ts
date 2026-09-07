@@ -230,7 +230,10 @@ export class LinkTitleSuggest extends EditorSuggest<SuggestionItem> {
         const suggestion: SuggestionItem = {
           file,
           display: displayName,
-          isCustomDisplay
+          isCustomDisplay,
+          // Carry the matched alias through to insertion. The dropdown already
+          // shows it, so selecting it has to produce a link that uses it.
+          matchedAlias: matchType === 'alias' ? matchReason.matchedAliasText : undefined
         };
         searchableSuggestions.push({ item: suggestion, match: bestMatch });
         this.matchReasons.set(file.path, matchReason);
@@ -562,10 +565,13 @@ export class LinkTitleSuggest extends EditorSuggest<SuggestionItem> {
     // choice, and the alias, so all of that stays consistent with the vault's
     // own settings.
     //
-    // The alias is only supplied when the note actually has the custom
+    // An alias match wins, because the dropdown showed that alias and picking
+    // it should link with it, which is what Obsidian's own suggester does.
+    // Otherwise the alias is only supplied when the note has the custom
     // property, so notes without it keep plain Obsidian behaviour.
     const sourcePath = activeView.file?.path ?? '';
-    const alias = suggestion.isCustomDisplay ? suggestion.display : undefined;
+    const alias = suggestion.matchedAlias
+      ?? (suggestion.isCustomDisplay ? suggestion.display : undefined);
     const linkText = this.app.fileManager.generateMarkdownLink(
       suggestion.file,
       sourcePath,
