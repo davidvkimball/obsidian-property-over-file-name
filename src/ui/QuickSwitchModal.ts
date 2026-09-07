@@ -206,13 +206,9 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
         recentFiles.push(...additionalFiles);
       } else {
         // Only markdown files (and MDX if enabled)
-        const allMarkdownFiles = this.app.vault.getMarkdownFiles();
-        const mdxFiles = this.plugin.settings.enableMdxSupport
-          ? this.app.vault.getFiles().filter(
-            (f): f is TFile => f instanceof TFile && f.extension === 'mdx'
-          )
-          : [];
-        const allSupportedFiles = [...allMarkdownFiles, ...mdxFiles];
+        const allSupportedFiles = this.app.vault
+          .getFiles()
+          .filter((f): f is TFile => f instanceof TFile && this.isPrimaryFile(f));
         const behavior = this.plugin.settings.quickSwitcherExcludedBehavior;
         const additionalFiles = allSupportedFiles
           .filter(file => !existingPaths.has(file.path))
@@ -233,32 +229,37 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
   private getFilteredFiles(): TFile[] {
     const quickSwitcherOptions = this.getQuickSwitcherOptions();
 
-    // Start with markdown files
-    let files = this.app.vault.getMarkdownFiles();
+    // Start with the file types the core switcher shows by default, which is
+    // notes plus canvas and base files.
+    let files = this.app.vault
+      .getFiles()
+      .filter((f): f is TFile => f instanceof TFile && this.isPrimaryFile(f));
 
-    // Add MDX files if MDX support is enabled
-    if (this.plugin.settings.enableMdxSupport) {
-      const mdxFiles = this.app.vault.getFiles().filter(
-        (f): f is TFile => f instanceof TFile && f.extension === 'mdx'
-      );
-      files = [...files, ...mdxFiles];
-    }
-
-    // If we can access Quick Switcher options and attachments are enabled, include them
-    if (quickSwitcherOptions?.showAttachments) {
-      const allFiles = this.app.vault.getFiles().filter((file): file is TFile => file instanceof TFile);
-      // Include markdown files, MDX files (if enabled), and attachments
-      files = allFiles.filter((file): file is TFile =>
-        file instanceof TFile && (
-          file.extension === 'md' ||
-          (file.extension === 'mdx' && this.plugin.settings.enableMdxSupport) ||
-          this.isAttachment(file)
-        )
-      );
+    // Widen the set to match the core quick switcher's own options.
+    if (quickSwitcherOptions?.showAllFileTypes) {
+      // Every file in the vault, including types the plugin does not classify.
+      files = this.app.vault.getFiles().filter((file): file is TFile => file instanceof TFile);
+    } else if (quickSwitcherOptions?.showAttachments) {
+      files = this.app.vault
+        .getFiles()
+        .filter((file): file is TFile =>
+          file instanceof TFile && (this.isPrimaryFile(file) || this.isAttachment(file))
+        );
     }
     // If showAttachments is false or we can't access options, only show markdown files (and MDX if enabled)
 
     return files;
+  }
+
+  /**
+   * File types the core quick switcher lists without needing "Show
+   * attachments". Canvas and base files are first class documents rather than
+   * attachments, so gating them behind that option hid them entirely.
+   */
+  private isPrimaryFile(file: TFile): boolean {
+    const ext = file.extension.toLowerCase();
+    if (ext === 'md' || ext === 'canvas' || ext === 'base') return true;
+    return ext === 'mdx' && this.plugin.settings.enableMdxSupport;
   }
 
   private isAttachment(file: TFile): boolean {
