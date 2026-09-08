@@ -112,8 +112,17 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
   private async updateFileCache(file: TFile): Promise<void> {
     const { getFrontmatter, isFileTypeSupported } = await import('../utils/frontmatter');
 
-    // Skip unsupported file types
+    // Keep non-note types such as canvas and base in the cache so they stay
+    // searchable. They have no property to read, so they display under their
+    // file name.
     if (!isFileTypeSupported(file.extension, this.plugin.settings)) {
+      this.fileCache.set(file.path, {
+        file,
+        displayName: file.basename,
+        aliases: [],
+        lastModified: file.stat.mtime,
+        isCustomDisplay: false
+      });
       return;
     }
 
@@ -184,11 +193,12 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
     }
 
     // Filter based on Quick Switcher settings BEFORE backfilling
-    if (!showAttachments) {
-      // Filter out attachments - only show markdown files (and MDX if enabled)
+    // Apply the same rules the suggestion list uses, so recents cannot show a
+    // file type the switcher options exclude.
+    const showAllFileTypes = quickSwitcherOptions?.showAllFileTypes ?? false;
+    if (!showAllFileTypes) {
       recentFiles = recentFiles.filter(file =>
-        file.extension === 'md' ||
-        (file.extension === 'mdx' && this.plugin.settings.enableMdxSupport)
+        showAttachments ? (this.isNoteFile(file) || this.isAttachment(file)) : this.isNoteFile(file)
       );
     }
 
@@ -205,10 +215,10 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
           .slice(0, targetCount - recentFiles.length);
         recentFiles.push(...additionalFiles);
       } else {
-        // Only markdown files (and MDX if enabled)
+        // Notes only, matching the core switcher's default backfill.
         const allSupportedFiles = this.app.vault
           .getFiles()
-          .filter((f): f is TFile => f instanceof TFile && this.isPrimaryFile(f));
+          .filter((f): f is TFile => f instanceof TFile && this.isNoteFile(f));
         const behavior = this.plugin.settings.quickSwitcherExcludedBehavior;
         const additionalFiles = allSupportedFiles
           .filter(file => !existingPaths.has(file.path))
@@ -229,21 +239,20 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
   private getFilteredFiles(): TFile[] {
     const quickSwitcherOptions = this.getQuickSwitcherOptions();
 
-    // Start with the file types the core switcher shows by default, which is
-    // notes plus canvas and base files.
+    // Mirror the core switcher exactly: notes by default, plus attachments or
+    // every file type as its own options dictate.
     let files = this.app.vault
       .getFiles()
-      .filter((f): f is TFile => f instanceof TFile && this.isPrimaryFile(f));
+      .filter((f): f is TFile => f instanceof TFile && this.isNoteFile(f));
 
-    // Widen the set to match the core quick switcher's own options.
     if (quickSwitcherOptions?.showAllFileTypes) {
-      // Every file in the vault, including types the plugin does not classify.
+      // Every file in the vault, which is where canvas and base files appear.
       files = this.app.vault.getFiles().filter((file): file is TFile => file instanceof TFile);
     } else if (quickSwitcherOptions?.showAttachments) {
       files = this.app.vault
         .getFiles()
         .filter((file): file is TFile =>
-          file instanceof TFile && (this.isPrimaryFile(file) || this.isAttachment(file))
+          file instanceof TFile && (this.isNoteFile(file) || this.isAttachment(file))
         );
     }
     // If showAttachments is false or we can't access options, only show markdown files (and MDX if enabled)
@@ -252,13 +261,14 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
   }
 
   /**
-   * File types the core quick switcher lists without needing "Show
-   * attachments". Canvas and base files are first class documents rather than
-   * attachments, so gating them behind that option hid them entirely.
+   * What the core switcher lists by default, which is notes only. Canvas and
+   * base files are not included here on purpose: core treats them as other
+   * file types and reveals them through "Show all file types", so listing them
+   * unconditionally would show more than core does.
    */
-  private isPrimaryFile(file: TFile): boolean {
+  private isNoteFile(file: TFile): boolean {
     const ext = file.extension.toLowerCase();
-    if (ext === 'md' || ext === 'canvas' || ext === 'base') return true;
+    if (ext === 'md') return true;
     return ext === 'mdx' && this.plugin.settings.enableMdxSupport;
   }
 

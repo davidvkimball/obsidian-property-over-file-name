@@ -56,8 +56,19 @@ export async function buildFileCache(
 
   // Process files in parallel for better performance
   await Promise.all(files.map(async (file) => {
-    // Skip unsupported file types
+    // File types this plugin cannot read a property from, such as canvas and
+    // base files, are still cached so they stay searchable. Skipping them
+    // removed them from the quick switcher entirely, which conflated "has no
+    // property to display" with "should not be listed". They simply show under
+    // their file name.
     if (!isFileTypeSupported(file.extension, settings)) {
+      cache.set(file.path, {
+        file,
+        displayName: file.basename,
+        aliases: [],
+        lastModified: file.stat.mtime,
+        isCustomDisplay: false
+      });
       return;
     }
 
