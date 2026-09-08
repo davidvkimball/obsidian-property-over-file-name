@@ -1,4 +1,4 @@
-import { App, FuzzySuggestModal, MarkdownView, Notice, TFile, prepareFuzzySearch, prepareSimpleSearch, FuzzyMatch, sortSearchResults, SearchResult } from 'obsidian';
+import { App, FuzzySuggestModal, MarkdownView, Notice, TFile, prepareFuzzySearch, prepareSimpleSearch, FuzzyMatch, sortSearchResults, SearchResult, PaneType } from 'obsidian';
 import { QuickSwitchItem, CachedFileData, SearchMatchReason, PropertyOverFileNamePlugin, WorkspaceInternal, QuickSwitcherPluginInstance, UnresolvedLinkItem, NewNoteItem, AppInternal } from '../types';
 import { buildFileCache, isExcluded } from '../utils/search';
 import { getFrontmatterSync } from '../utils/frontmatter';
@@ -423,56 +423,47 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
         matchedInAlias: false
       };
 
-      // Primary match: search title/property first (only if note has custom display)
-      let primaryMatch: SearchResult | null = null;
-      let bestMatch: SearchResult | null = null;
-      let matchType: 'title' | 'filename' | 'alias' | null = null;
+      // Score the title, the file name and every alias, then keep the best.
+      // Aliases used to be tried only when nothing else matched, so a fuzzy
+      // file name hit could pre-empt an exact alias: searching FYI matched the
+      // initials of "For Your Information" and the row then showed the file
+      // name or title rather than the alias that was actually searched for.
+      const candidates: { type: 'title' | 'filename' | 'alias'; result: SearchResult; alias?: string }[] = [];
 
       if (isCustomDisplay) {
-        // Only search title/property if note actually has a custom property
-        primaryMatch = search(displayName);
-        if (primaryMatch && primaryMatch.matches.length > 0) {
-          matchReason.matchedInTitle = true;
-          bestMatch = primaryMatch;
-          matchType = 'title';
+        const titleMatch = search(displayName);
+        if (titleMatch && titleMatch.matches.length > 0) {
+          candidates.push({ type: 'title', result: titleMatch });
         }
       }
 
-      // If no title match (or note doesn't have property), search filename
-      if (!matchType) {
-        // Search filename if it's different from displayName, or if note doesn't have property
-        if (this.plugin.settings.includeFilenameInSearch && file.basename !== displayName) {
-          const filenameMatch = search(file.basename);
-          if (filenameMatch && filenameMatch.matches.length > 0) {
-            matchReason.matchedInFilename = true;
-            // Downrank filename matches by -1
-            bestMatch = { ...filenameMatch, score: filenameMatch.score - 1 };
-            matchType = 'filename';
-          }
-        } else if (!isCustomDisplay) {
-          // If note doesn't have property, displayName equals filename, so search filename
-          const filenameMatch = search(file.basename);
-          if (filenameMatch && filenameMatch.matches.length > 0) {
-            matchReason.matchedInFilename = true;
-            bestMatch = filenameMatch;
-            matchType = 'filename';
-          }
+      // When the note has no property the display name is the file name, so
+      // this doubles as the title search for those notes.
+      if (this.plugin.settings.includeFilenameInSearch || !isCustomDisplay) {
+        const filenameMatch = search(file.basename);
+        if (filenameMatch && filenameMatch.matches.length > 0) {
+          // Downranked so a title or alias hit of equal quality wins.
+          candidates.push({ type: 'filename', result: { ...filenameMatch, score: filenameMatch.score - 1 } });
         }
       }
 
-      // Tertiary match: search aliases (with downranking)
-      if (!matchType && this.plugin.settings.includeAliasesInSearch && aliases.length > 0) {
+      if (this.plugin.settings.includeAliasesInSearch) {
         for (const alias of aliases) {
           const aliasMatch = search(alias);
           if (aliasMatch && aliasMatch.matches.length > 0) {
-            matchReason.matchedInAlias = true;
-            matchReason.matchedAliasText = alias; // Store which alias matched
-            // Downrank alias matches by -1
-            bestMatch = { ...aliasMatch, score: aliasMatch.score - 1 };
-            matchType = 'alias';
-            break;
+            candidates.push({ type: 'alias', result: { ...aliasMatch, score: aliasMatch.score - 1 }, alias });
           }
         }
+      }
+
+      let bestMatch: SearchResult | null = null;
+      for (const candidate of candidates) {
+        if (bestMatch && candidate.result.score <= bestMatch.score) continue;
+        bestMatch = candidate.result;
+        matchReason.matchedInTitle = candidate.type === 'title';
+        matchReason.matchedInFilename = candidate.type === 'filename';
+        matchReason.matchedInAlias = candidate.type === 'alias';
+        matchReason.matchedAliasText = candidate.type === 'alias' ? candidate.alias : undefined;
       }
 
       // If we have any match, add to results
@@ -663,7 +654,10 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
       const matchReason = this.matchReasons.get(item.path);
 
       // Special case: notes without property that matched via alias should show alias with icon
-      if (!isCustomDisplay && matchReason?.matchedInAlias && matchReason.matchedAliasText) {
+      // Show the alias whenever the alias is what matched. This used to be
+      // limited to notes without the property, so a note with a title showed
+      // that title even though the query matched an alias.
+      if (matchReason?.matchedInAlias && matchReason.matchedAliasText) {
         // Show alias as main text, filename below, with alias icon (like default Obsidian)
         el.addClass('mod-complex');
         const suggestionContent = el.createDiv({ cls: 'suggestion-content' });
@@ -933,8 +927,20 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
       const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
       const sourcePath = activeView?.file?.path || '';
 
-      // Use openLinkText which respects Obsidian's default new note location settings
-      void this.app.workspace.openLinkText(item.newName, sourcePath).catch((err: unknown) => {
+      // Honour the same modifiers used for opening an existing note, so
+      // creating one lands where the core switcher would put it. Without a
+      // pane argument a new note always replaced the current tab.
+      const keyEvent = evt instanceof KeyboardEvent ? evt : null;
+      const createModKey = !!keyEvent && (keyEvent.ctrlKey || keyEvent.metaKey);
+      let newLeaf: PaneType | false = false;
+      if (createModKey && keyEvent?.altKey) {
+        newLeaf = 'split';
+      } else if (createModKey) {
+        newLeaf = 'tab';
+      }
+
+      // openLinkText respects Obsidian's default new note location settings.
+      void this.app.workspace.openLinkText(item.newName, sourcePath, newLeaf).catch((err: unknown) => {
         const message = err instanceof Error ? err.message : String(err);
         new Notice(`Error creating note: ${message}`);
       });
