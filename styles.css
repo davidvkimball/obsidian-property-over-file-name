@@ -282,3 +282,14 @@
 	margin-top: 0;
 }
 
+
+/* Type badge on non-note results in the quick switcher, so a canvas, base or
+   PDF is distinguishable from a note at a glance. Sits alongside the existing
+   match-reason icon in the same aux container. */
+.pofn-extension-flair {
+  font-size: var(--font-smallest);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  opacity: 0.8;
+}

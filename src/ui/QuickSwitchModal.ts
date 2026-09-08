@@ -456,6 +456,16 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
         }
       }
 
+      // Let a non-note be found by its type, so "canvas" or "base" reaches
+      // those files. Downranked further than the other fields so it never
+      // outranks a real name match.
+      if (!this.isNoteFile(file)) {
+        const extMatch = search(file.extension.toLowerCase());
+        if (extMatch && extMatch.matches.length > 0) {
+          candidates.push({ type: 'filename', result: { ...extMatch, score: extMatch.score - 2 } });
+        }
+      }
+
       let bestMatch: SearchResult | null = null;
       for (const candidate of candidates) {
         if (bestMatch && candidate.result.score <= bestMatch.score) continue;
@@ -736,6 +746,17 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
         // For notes without the property (and not matched via alias), show simple display (no icon, no duplicate name)
         el.setText(text);
       }
+    }
+
+    // Tag anything that is not a note with its extension, the way the core
+    // switcher does, so a canvas, base or PDF is not mistaken for a note. Done
+    // once here because the branches above build several different layouts.
+    if (item instanceof TFile && !this.isNoteFile(item)) {
+      const aux = el.querySelector('.suggestion-aux') ?? el.createDiv({ cls: 'suggestion-aux' });
+      aux.createSpan({
+        cls: 'suggestion-flair pofn-extension-flair',
+        text: item.extension.toLowerCase()
+      });
     }
   }
 
