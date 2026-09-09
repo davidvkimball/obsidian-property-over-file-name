@@ -59,6 +59,14 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
       this.chooseSelected(evt);
       return false;
     });
+    // Mod+Shift+Enter is the core switcher's "in a new tab" variant: it opens
+    // an exact match there, and creates the note there when the query only
+    // partially matches. Both branches in onChooseItem already treat the Mod
+    // key as "new tab", so registering the shortcut is all that is needed.
+    this.scope.register(['Mod', 'Shift'], 'Enter', (evt) => {
+      this.chooseSelected(evt);
+      return false;
+    });
   }
 
   /**
@@ -87,6 +95,7 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
         { command: 'ctrl ↵', action: 'to open in new tab' },
         { command: 'ctrl alt ↵', action: 'to open to the right' },
         { command: 'shift ↵', action: 'to create' },
+        { command: 'ctrl shift ↵', action: 'to create in new tab' },
         { command: 'esc', action: 'to dismiss' }
       ];
 
