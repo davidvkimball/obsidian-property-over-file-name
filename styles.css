@@ -59,7 +59,11 @@
   transition: background-color 0.1s ease;
 }
 
-.property-over-filename-modal .suggestion-item:hover {
+/* Hover only counts once the mouse has actually moved over the modal. Opening
+   the switcher with the pointer already resting where a row appears would
+   otherwise highlight that row identically to the keyboard selection, showing
+   two selected items at once. */
+.property-over-filename-modal.pofn-pointer-active .suggestion-item:hover {
   background-color: var(--background-modifier-hover);
 }
 

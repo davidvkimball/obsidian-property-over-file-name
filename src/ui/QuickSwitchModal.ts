@@ -25,12 +25,27 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
     void this.buildFileCache();
     this.updateRecentFiles();
     this.addKeyboardNavigation();
+    this.enableHoverAfterPointerMove();
     this.addFooter();
 
     // Only add scoping class when enabled
     if (this.plugin.settings.enableForQuickSwitcher) {
       this.containerEl.addClass('property-over-filename-modal');
     }
+  }
+
+  /**
+   * Only let hover highlight a row once the pointer has actually moved. If the
+   * switcher opens under a resting cursor, the row beneath it would otherwise
+   * highlight exactly like the keyboard selection and two rows would look
+   * selected at once. Moving the mouse afterwards behaves normally.
+   */
+  private enableHoverAfterPointerMove(): void {
+    const activate = () => {
+      this.containerEl.addClass('pofn-pointer-active');
+      this.containerEl.removeEventListener('mousemove', activate);
+    };
+    this.containerEl.addEventListener('mousemove', activate);
   }
 
   private addKeyboardNavigation(): void {
