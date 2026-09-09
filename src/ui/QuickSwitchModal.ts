@@ -74,14 +74,57 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
       this.chooseSelected(evt);
       return false;
     });
-    // Mod+Shift+Enter is the core switcher's "in a new tab" variant: it opens
-    // an exact match there, and creates the note there when the query only
-    // partially matches. Both branches in onChooseItem already treat the Mod
-    // key as "new tab", so registering the shortcut is all that is needed.
+    // Mod+Shift+Enter acts on what was typed, not on what is highlighted, so
+    // it cannot go through chooseSelected like the others.
     this.scope.register(['Mod', 'Shift'], 'Enter', (evt) => {
-      this.chooseSelected(evt);
+      this.chooseFromQuery(evt);
       return false;
     });
+  }
+
+  /**
+   * Mod+Shift+Enter opens an exact match in a new tab, and otherwise creates a
+   * note named after the query in a new tab, which is what the core switcher
+   * does. It deliberately ignores the highlighted row: typing "amz" while a
+   * fuzzy result like "Amazing" is highlighted should create "amz", not open
+   * the highlighted note.
+   */
+  private chooseFromQuery(evt: KeyboardEvent): void {
+    const query = this.inputEl.value.trim();
+    if (!query) {
+      this.chooseSelected(evt);
+      return;
+    }
+
+    const existing = this.findExactMatch(query);
+    this.close();
+
+    if (existing) {
+      void this.app.workspace.getLeaf('tab').openFile(existing);
+      return;
+    }
+
+    const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+    const sourcePath = activeView?.file?.path || '';
+    void this.app.workspace.openLinkText(query, sourcePath, 'tab').catch((err: unknown) => {
+      const message = err instanceof Error ? err.message : String(err);
+      new Notice(`Error creating note: ${message}`);
+    });
+  }
+
+  /**
+   * A note whose title, file name or alias is exactly the query. The file name
+   * is always checked, even when it is excluded from search, so this can never
+   * create a second note beside one that already carries that name.
+   */
+  private findExactMatch(query: string): TFile | null {
+    const lower = query.toLowerCase();
+    for (const { file, displayName, aliases } of this.fileCache.values()) {
+      if (displayName.toLowerCase() === lower) return file;
+      if (file.basename.toLowerCase() === lower) return file;
+      if (this.plugin.settings.includeAliasesInSearch && aliases.some(a => a.toLowerCase() === lower)) return file;
+    }
+    return null;
   }
 
   /**
