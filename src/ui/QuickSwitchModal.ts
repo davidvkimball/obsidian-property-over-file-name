@@ -745,7 +745,7 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
 
         // File path below
         const pathEl = suggestionContent.createDiv({ cls: 'suggestion-note' });
-        pathEl.setText(item.path.replace('.md', ''));
+        pathEl.setText(item.path);
 
         // Add suggestion-aux with alias icon
         const suggestionAux = el.createDiv({ cls: 'suggestion-aux' });
@@ -771,7 +771,7 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
 
           // File path below
           const pathEl = suggestionContent.createDiv({ cls: 'suggestion-note' });
-          pathEl.setText(item.path.replace('.md', ''));
+          pathEl.setText(item.path);
 
           // Add suggestion-aux with appropriate icon based on match reason
           const suggestionAux = el.createDiv({ cls: 'suggestion-aux' });
@@ -799,7 +799,7 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
           const titleEl = suggestionContent.createDiv({ cls: 'suggestion-title' });
           titleEl.setText(text);
           const pathEl = suggestionContent.createDiv({ cls: 'suggestion-note' });
-          pathEl.setText(item.path.replace('.md', ''));
+          pathEl.setText(item.path);
 
           // Show "T" icon for property-based titles
           const suggestionAux = el.createDiv({ cls: 'suggestion-aux' });
@@ -810,21 +810,17 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
           this.createTypeIcon(suggestionFlair);
         }
       } else {
-        // For notes without the property (and not matched via alias), show simple display (no icon, no duplicate name)
-        el.setText(text);
+        // Notes with no property, not matched by alias. These used to render as
+        // a single line with no path, which left the most common rows as the
+        // only ones you could not place, and made same named notes in
+        // different folders indistinguishable.
+        el.addClass('mod-complex');
+        const suggestionContent = el.createDiv({ cls: 'suggestion-content' });
+        suggestionContent.createDiv({ cls: 'suggestion-title' }).setText(text);
+        suggestionContent.createDiv({ cls: 'suggestion-note' }).setText(item.path);
       }
     }
 
-    // Tag anything that is not a note with its extension, the way the core
-    // switcher does, so a canvas, base or PDF is not mistaken for a note. Done
-    // once here because the branches above build several different layouts.
-    if (item instanceof TFile && !this.isNoteFile(item)) {
-      const aux = el.querySelector('.suggestion-aux') ?? el.createDiv({ cls: 'suggestion-aux' });
-      aux.createSpan({
-        cls: 'suggestion-flair pofn-extension-flair',
-        text: item.extension.toLowerCase()
-      });
-    }
   }
 
   private getIconLabel(matchReason: SearchMatchReason): string {
