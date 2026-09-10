@@ -523,14 +523,17 @@ export class QuickSwitchModal extends FuzzySuggestModal<QuickSwitchItem['item']>
         }
       }
 
-      // Let a non-note be found by its type, so "canvas" or "base" reaches
-      // those files. Downranked further than the other fields so it never
-      // outranks a real name match.
-      if (!this.isNoteFile(file)) {
-        const extMatch = search(file.extension.toLowerCase());
-        if (extMatch && extMatch.matches.length > 0) {
-          candidates.push({ type: 'filename', result: { ...extMatch, score: extMatch.score - 2 } });
-        }
+      // The whole vault path, so a query spanning folders and the name finds
+      // the file: "not mov ody" reaches Notes/Movies/2001 A Space Odyssey.
+      // Matched term by term rather than as one fuzzy run, because a
+      // subsequence over a long path matches almost anything and the terms in
+      // this kind of query belong to different path segments. The path carries
+      // the extension, so ".pdf" or "canvas" narrows by type as well.
+      // Downranked hardest, so a direct hit on a name always wins.
+      const pathSearch = prepareSimpleSearch(searchQuery);
+      const pathMatch = pathSearch(file.path);
+      if (pathMatch && pathMatch.matches.length > 0) {
+        candidates.push({ type: 'filename', result: { ...pathMatch, score: pathMatch.score - 3 } });
       }
 
       let bestMatch: SearchResult | null = null;
